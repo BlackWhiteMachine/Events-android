@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Events</string>
+    <string name="title_activity_maps">MapsActivity</string>
+    <string name="main_activity_request_permission_rationale_message">For working application needs to give Location permission</string>
+
+    <string name="filter_place">Place</string>
+    <string name="filter_events">Events</string>
+    <string name="filter_activities">Activities</string>
+</resources>

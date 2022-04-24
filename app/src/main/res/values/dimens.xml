@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <dimen name="vertical_padding_xsmall">4dp</dimen>
+    <dimen name="vertical_padding_small">8dp</dimen>
+    <dimen name="vertical_padding_xmedium">12dp</dimen>
+    <dimen name="vertical_padding_medium">16dp</dimen>
+    <dimen name="vertical_padding_lmedium">20dp</dimen>
+    <dimen name="vertical_padding_xlmedium">24dp</dimen>
+    <dimen name="vertical_padding_large">32dp</dimen>
+
+    <dimen name="horizontal_padding_xsmall">4dp</dimen>
+    <dimen name="horizontal_padding_small">8dp</dimen>
+    <dimen name="horizontal_padding_xmedium">12dp</dimen>
+    <dimen name="horizontal_padding_medium">16dp</dimen>
+    <dimen name="horizontal_padding_lmedium">20dp</dimen>
+    <dimen name="horizontal_padding_xlmedium">24dp</dimen>
+    <dimen name="horizontal_padding_large">32dp</dimen>
+    <dimen name="horizontal_padding_max">32dp</dimen>
+
+
+    <dimen name="text_size_large">18sp</dimen>
+
+</resources>
