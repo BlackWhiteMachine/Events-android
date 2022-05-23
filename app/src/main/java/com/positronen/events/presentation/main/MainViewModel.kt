@@ -1,18 +1,25 @@
+@file:OptIn(ExperimentalCoroutinesApi::class)
+
 package com.positronen.events.presentation.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.positronen.events.data.location.LocationDataSource
 import com.positronen.events.domain.model.ChannelEvent
+import com.positronen.events.domain.model.DataResource
+import com.positronen.events.domain.model.MapRegionModel
+import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointModel
 import com.positronen.events.domain.model.PointType
-import com.positronen.events.domain.model.Source
 import com.positronen.events.presentation.MainInteractor
 import com.positronen.events.presentation.MapModel
-import com.positronen.events.presentation.map.VisibleRegionWrapper
 import com.positronen.events.utils.Logger
+import com.positronen.events.utils.getTileRegion
+import com.positronen.events.utils.getTilesList
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -25,7 +32,13 @@ class MainViewModel @Inject constructor(
     private val mainInteractor: MainInteractor
 ) : ViewModel() {
 
-    private val mapState = MutableStateFlow(MapModel())
+    private val mapStateFlow = MutableStateFlow(MapModel())
+
+    private var visibleRegion: MapRegionModel ?= null
+    private var visibleTiles: List<MapTileRegionModel>? = null
+    private var isPlaceEnabled = false
+    private var isEventsEnabled = false
+    private var isActivitiesEnabled = false
 
     private val points: MutableList<PointModel> = mutableListOf()
 
@@ -34,43 +47,20 @@ class MainViewModel @Inject constructor(
         get() = eventChannel.receiveAsFlow()
 
     val showLoading: Flow<Boolean>
-        get() = mapState.map { it.placesSource == Source.LOADING || it.eventsSource == Source.LOADING }
-
-    fun onMapReady() {
-        viewModelScope.launch {
-            mapState.distinctUntilChangedBy { it.isPlaceEnabled }
-                .collect { mapModel ->
-                    if (mapModel.isPlaceEnabled) {
-                        obtainPlaces(mapModel)
-                    } else {
-                        val removeList = mutableListOf<PointModel>()
-                        points.forEach {
-                            if (it.pointType == PointType.PLACE) {
-                                eventChannel.send(ChannelEvent.RemovePoint(it.id))
-                                removeList.add(it)
-                            }
-                        }
-                        points.removeAll(removeList)
-                        mapState.value = mapState.value.copy(placesSource = Source.INIT)
-                    }
-            }
+        get() = mapStateFlow.map {
+            it.placesSource is DataResource.Loading || it.eventsSource is DataResource.Loading
         }
 
+    fun onMapReady() {
+        val placesSourceFlow = mapStateFlow.mapNotNull {
+            (it.placesSource as? DataResource.Success)?.data
+        }
+        val eventsSourceFlow = mapStateFlow.mapNotNull {
+            (it.eventsSource as? DataResource.Success)?.data
+        }
         viewModelScope.launch {
-            mapState.distinctUntilChangedBy { it.isEventsEnabled }
-                .collect { mapModel ->
-                    if (mapModel.isEventsEnabled) {
-                        obtainEvents(mapModel)
-                    } else {
-                        val removeList = mutableListOf<PointModel>()
-                        points.forEach {
-                            eventChannel.send(ChannelEvent.RemovePoint(it.id))
-                            removeList.add(it)
-
-                        }
-                        points.removeAll(removeList)
-                        mapState.value = mapState.value.copy(eventsSource = Source.INIT)
-                    }
+            merge(placesSourceFlow, eventsSourceFlow).collect { pointsList ->
+                addPointsToMap(pointsList)
             }
         }
     }
@@ -92,105 +82,168 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun onCameraMoved(visibleRegionWrapper: VisibleRegionWrapper, zoom: Int) {
-        val newMapState = mapState.value.copy(
-            zoom = zoom,
-            centerLatitude = visibleRegionWrapper.centerLatitude(),
-            centerLongitude = visibleRegionWrapper.centerLongitude(),
-            radius = visibleRegionWrapper.radius()
+    fun onCameraMoved(visibleRegion: MapRegionModel) {
+        this.visibleRegion = visibleRegion
+
+        val visibleTiles = getTilesList(
+            visibleRegion = visibleRegion,
+            zoom = mainInteractor.defaultDataZoomLevel
         )
-
-        if (zoom > mapState.value.zoom) {
-            viewModelScope.launch {
-                if (newMapState.isPlaceEnabled) obtainPlaces(newMapState)
-                if (newMapState.isEventsEnabled) obtainEvents(newMapState)
-            }
-        } else if (zoom == mapState.value.zoom) {
-            val removeList = mutableListOf<PointModel>()
-
-            points.forEach {
-                val contains = visibleRegionWrapper.contains(it.location)
-
-                if (contains.not()) {
-                    viewModelScope.launch {
-                        eventChannel.send(ChannelEvent.RemovePoint(it.id))
-                    }
-                    removeList.add(it)
-                }
+            .map { (xTile, yTile) ->
+                getTileRegion(xTile, yTile, mainInteractor.defaultDataZoomLevel)
             }
 
-            removeList.forEach { points.remove(it) }
+        this.visibleTiles = visibleTiles
 
-            if (newMapState.isPlaceEnabled) obtainPlaces(newMapState)
-            if (newMapState.isEventsEnabled) obtainEvents(newMapState)
+        if (visibleTiles.isNotEmpty()) {
+            if (isPlaceEnabled) obtainPlaces(visibleTiles)
+            if (isEventsEnabled) obtainEvents(visibleTiles)
         }
 
-        mapState.value = newMapState
+        val removeList = mutableListOf<PointModel>()
+
+        points.forEach {
+            val contains = visibleRegion.isContains(it.location.latitude, it.location.longitude).not()
+
+            if (contains) {
+                removeList.add(it)
+            }
+        }
+
+        points.removeAll(removeList)
+
+        viewModelScope.launch {
+            eventChannel.send(ChannelEvent.RemovePoint(removeList.map { it.id }))
+        }
     }
 
     fun onPlaceFilterChanged(checked: Boolean) {
-        mapState.value = mapState.value.copy(isPlaceEnabled = checked)
+        isPlaceEnabled = checked
+        if (isPlaceEnabled) {
+            visibleTiles?.let { obtainPlaces(it) }
+        } else {
+            val removeList = mutableListOf<PointModel>()
+            points.forEach {
+                if (it.pointType == PointType.PLACE) {
+                    removeList.add(it)
+                }
+            }
+            viewModelScope.launch {
+                eventChannel.send(ChannelEvent.RemovePoint(removeList.map { it.id }))
+            }
+            points.removeAll(removeList)
+            mapStateFlow.value = mapStateFlow.value.copy(placesSource = DataResource.Init)
+        }
     }
 
     fun onEventsFilterChanged(checked: Boolean) {
-        mapState.value = mapState.value.copy(isEventsEnabled = checked)
+        isEventsEnabled = checked
+        if (isEventsEnabled) {
+            visibleTiles?.let { obtainEvents(it) }
+        } else {
+            val removeList = mutableListOf<PointModel>()
+            points.forEach {
+                removeList.add(it)
+            }
+            viewModelScope.launch {
+                eventChannel.send(ChannelEvent.RemovePoint(removeList.map { it.id }))
+            }
+            points.removeAll(removeList)
+            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = DataResource.Init)
+        }
     }
 
     fun onActivitiesFilterChanged(checked: Boolean) {
-        mapState.value = mapState.value.copy(isActivitiesEnabled = checked)
+        isActivitiesEnabled = checked
     }
 
-    private fun obtainPlaces(mapModel: MapModel) {
-        mapState.value = mapState.value.copy(placesSource = Source.LOADING)
-
+    private fun obtainPlaces(visibleTilesList: List<MapTileRegionModel>) {
         viewModelScope.launch(Dispatchers.IO) {
-            mainInteractor.places(mapModel.centerLatitude, mapModel.centerLongitude, mapModel.radius)
+            mapStateFlow.value = mapStateFlow.value.copy(placesSource = DataResource.Loading)
+
+            val result = mutableListOf<PointModel>()
+
+            mainInteractor.places(visibleTilesList)
                 .catch { error ->
+                    mapStateFlow.value = mapStateFlow.value.copy(
+                        placesSource = DataResource.Error(error)
+                    )
                     Logger.exception(Exception(error.message))
                 }
+                .onCompletion {
+                    val resultDataResource = if (isPlaceEnabled) {
+                        DataResource.Success(result)
+                    } else {
+                        DataResource.Init
+                    }
+                    mapStateFlow.value = mapStateFlow.value.copy(
+                        placesSource = resultDataResource
+                    )
+                }
                 .collect { placesList ->
-                    mapState.value = mapState.value.copy(placesSource = Source.SUCCESS)
-
-                    addPointsToMap(placesList)
+                    if (isPlaceEnabled) {
+                        result.addAll(placesList)
+                    } else {
+                        cancel()
+                    }
                 }
         }
     }
 
-    private fun obtainEvents(mapModel: MapModel) {
-        mapState.value = mapState.value.copy(eventsSource = Source.LOADING)
-
+    private fun obtainEvents(visibleTilesList: List<MapTileRegionModel>) {
         viewModelScope.launch(Dispatchers.IO) {
-            mainInteractor.events(mapModel.centerLatitude, mapModel.centerLongitude, mapModel.radius)
+            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = DataResource.Loading)
+
+            val result = mutableListOf<PointModel>()
+
+            mainInteractor.events(visibleTilesList)
                 .catch { error ->
+                    mapStateFlow.value = mapStateFlow.value.copy(
+                        eventsSource = DataResource.Error(error)
+                    )
                     Logger.exception(Exception(error.message))
                 }
-                .collect { placesList ->
-                    mapState.value = mapState.value.copy(eventsSource = Source.SUCCESS)
-
-                    addPointsToMap(placesList)
+                .onCompletion {
+                    val resultDataResource = if (isPlaceEnabled) {
+                        DataResource.Success(result)
+                    } else {
+                        DataResource.Init
+                    }
+                    mapStateFlow.value = mapStateFlow.value.copy(
+                        eventsSource = resultDataResource
+                    )
+                }
+                .collect { eventsList ->
+                    if (isEventsEnabled) {
+                        result.addAll(eventsList)
+                    } else {
+                        cancel()
+                    }
                 }
         }
     }
 
-    private suspend fun addPointsToMap(pointsList: List<PointModel>) {
+    private fun addPointsToMap(pointsList: List<PointModel>) {
+        val visibleRegion = this.visibleRegion ?: return
+
         pointsList.forEach { pointModel ->
             if (points.find { it.id == pointModel.id } != null) return@forEach
 
-            points.add(pointModel)
+            if (visibleRegion.isContains(pointModel.location.latitude, pointModel.location.longitude)) {
+                points.add(pointModel)
 
-            eventChannel.send(
-                ChannelEvent.AddPoint(
-                    id = pointModel.id,
-                    name = pointModel.name,
-                    description = pointModel.description,
-                    lat = pointModel.location.latitude,
-                    lon = pointModel.location.longitude
-                )
-            )
+                viewModelScope.launch {
+                    eventChannel.send(
+                        ChannelEvent.AddPoint(
+                            id = pointModel.id,
+                            name = pointModel.name,
+                            description = pointModel.description,
+                            lat = pointModel.location.latitude,
+                            lon = pointModel.location.longitude
+                        )
+                    )
+                }
+            }
         }
-    }
-
-    private companion object {
-        const val MIN_ZOOM_LEVEL: Int = 13
     }
 }

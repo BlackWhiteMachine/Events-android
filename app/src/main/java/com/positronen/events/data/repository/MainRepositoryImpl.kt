@@ -1,11 +1,13 @@
 package com.positronen.events.data.repository
 
+import android.location.Location
 import com.positronen.events.data.converter.MainConverter
 import com.positronen.events.data.converter.MainConverterImpl
 import com.positronen.events.data.model.EventsV1Response
 import com.positronen.events.data.model.PlaceV2Response
 import com.positronen.events.data.service.MainService
 import com.positronen.events.domain.MainRepository
+import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointModel
 import kotlinx.coroutines.flow.Flow
@@ -20,8 +22,17 @@ class MainRepositoryImpl @Inject constructor(
 
     private val mainConverter: MainConverter = MainConverterImpl()
 
-    override fun places(latitude: Double, longitude: Double, distance: Float): Flow<List<PointModel>> = flow {
-        val distanceFilter = DISTANCE_FILTER.format(latitude, longitude, distance)
+    override suspend fun places(tileRegion: MapTileRegionModel): List<PointModel> {
+        val centerLatitude = (tileRegion.topLeftLatitude + tileRegion.bottomRightLatitude) / 2
+        val centerLongitude = (tileRegion.topLeftLongitude + tileRegion.bottomRightLongitude) / 2
+        val distance = radius(
+            firstLatitude = tileRegion.topLeftLatitude,
+            firstLongitude = tileRegion.topLeftLongitude,
+            secondLatitude = centerLatitude,
+            secondLongitude = centerLongitude
+        )
+
+        val distanceFilter = DISTANCE_FILTER.format(centerLatitude, centerLongitude, distance)
         val resultList = mutableListOf<PlaceV2Response>()
         var hasNext = true
         var start = 0
@@ -33,15 +44,29 @@ class MainRepositoryImpl @Inject constructor(
             hasNext = response.size == PAGE_SIZE
         }
 
-        emit(resultList)
-    }.map(mainConverter::convertResponsePlaces)
+        return mainConverter.convertResponsePlaces(resultList).filter {
+            tileRegion.isContains(
+                it.location.latitude,
+                it.location.longitude,
+            )
+        }
+    }
 
     override fun place(id: String): Flow<PointDetailModel> = flow {
         emit(service.place(id))
     }.mapNotNull(mainConverter::convertResponsePlaceDetail)
 
-    override fun events(latitude: Double, longitude: Double, distance: Float): Flow<List<PointModel>> = flow {
-        val distanceFilter = DISTANCE_FILTER.format(latitude, longitude, distance)
+    override suspend fun events(tileRegion: MapTileRegionModel): List<PointModel>{
+        val centerLatitude = (tileRegion.topLeftLatitude + tileRegion.bottomRightLatitude) / 2
+        val centerLongitude = (tileRegion.topLeftLongitude + tileRegion.bottomRightLatitude) / 2
+        val distance = radius(
+            firstLatitude = tileRegion.topLeftLatitude,
+            firstLongitude = tileRegion.topLeftLongitude,
+            secondLatitude = centerLatitude,
+            secondLongitude = centerLongitude
+        )
+
+        val distanceFilter = DISTANCE_FILTER.format(centerLatitude, centerLongitude, distance)
         val resultList = mutableListOf<EventsV1Response>()
         var hasNext = true
         var start = 0
@@ -52,8 +77,13 @@ class MainRepositoryImpl @Inject constructor(
             hasNext = response.size == PAGE_SIZE
         }
 
-        emit(resultList)
-    }.map(mainConverter::convertResponseEvents)
+        return mainConverter.convertResponseEvents(resultList).filter {
+            tileRegion.isContains(
+                it.location.latitude,
+                it.location.longitude,
+            )
+        }
+    }
 
     override fun event(id: String): Flow<PointDetailModel> = flow {
         emit(service.event(id))
@@ -67,8 +97,26 @@ class MainRepositoryImpl @Inject constructor(
         emit(service.activity(id))
     }.mapNotNull(mainConverter::convertResponsePlaceDetail)
 
+    private fun radius(
+        firstLatitude: Double,
+        firstLongitude: Double,
+        secondLatitude: Double,
+        secondLongitude: Double
+    ): Float {
+        val result = FloatArray(1)
+        Location.distanceBetween(
+            firstLatitude,
+            firstLongitude,
+            secondLatitude,
+            secondLongitude,
+            result
+        )
+
+        return result[0]/1000
+    }
+
     private companion object {
         const val DISTANCE_FILTER: String = "%.7f,%.7f,%.4f"
-        const val PAGE_SIZE: Int = 20
+        const val PAGE_SIZE: Int = 50
     }
 }

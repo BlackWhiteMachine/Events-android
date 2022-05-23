@@ -25,8 +25,8 @@ import com.google.android.gms.maps.model.MarkerOptions
 import com.positronen.events.R
 import com.positronen.events.databinding.ActivityMapsBinding
 import com.positronen.events.domain.model.ChannelEvent
+import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.presentation.detail.DetailInfoDialogFragment
-import com.positronen.events.presentation.map.VisibleRegionWrapper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -34,7 +34,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
@@ -84,11 +83,15 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 lifecycleScope.launchWhenStarted {
                     cameraMovedFlow.debounce(Duration.Companion.milliseconds(DEBOUNCE_MILLIS))
                         .collect {
-                            val visibleRegionWrapper = VisibleRegionWrapper(map.projection.visibleRegion)
+                            val visibleRegion = map.projection.visibleRegion
 
                             viewModel.onCameraMoved(
-                                visibleRegionWrapper,
-                                map.cameraPosition.zoom.roundToInt()
+                                MapRegionModel(
+                                    topLeftLatitude = visibleRegion.farLeft.latitude,
+                                    topLeftLongitude = visibleRegion.farLeft.longitude,
+                                    bottomRightLatitude = visibleRegion.nearRight.latitude,
+                                    bottomRightLongitude = visibleRegion.nearRight.longitude
+                                )
                             )
                         }
                 }
@@ -234,7 +237,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun removePoint(channelEvent: ChannelEvent.RemovePoint) {
-        markersMap.remove(channelEvent.id)?.remove()
+        channelEvent.idsList.forEach { id ->
+            markersMap.remove(id)?.remove()
+        }
     }
 
     private companion object {

@@ -16,7 +16,7 @@ sealed class ChannelEvent {
     ) : ChannelEvent()
 
     data class RemovePoint(
-        val id: String
+        val idsList: List<String>
     ) : ChannelEvent()
 
     data class ShowBottomSheet(

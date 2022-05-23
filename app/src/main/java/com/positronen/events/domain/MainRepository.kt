@@ -1,16 +1,17 @@
 package com.positronen.events.domain
 
+import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointModel
 import kotlinx.coroutines.flow.Flow
 
 interface MainRepository {
 
-    fun places(latitude: Double, longitude: Double, distance: Float): Flow<List<PointModel>>
+    suspend fun places(tileRegion: MapTileRegionModel): List<PointModel>
 
     fun place(id: String): Flow<PointDetailModel>
 
-    fun events(latitude: Double, longitude: Double, distance: Float): Flow<List<PointModel>>
+    suspend fun events(tileRegion: MapTileRegionModel): List<PointModel>
 
     fun event(id: String): Flow<PointDetailModel>
 
