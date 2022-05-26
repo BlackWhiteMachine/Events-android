@@ -28,6 +28,7 @@ import com.positronen.events.databinding.ActivityMapsBinding
 import com.positronen.events.domain.model.ChannelEvent
 import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.presentation.detail.DetailInfoDialogFragment
+import com.positronen.events.utils.Logger
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -92,7 +93,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                                     topLeftLongitude = visibleRegion.farLeft.longitude,
                                     bottomRightLatitude = visibleRegion.nearRight.latitude,
                                     bottomRightLongitude = visibleRegion.nearRight.longitude
-                                )
+                                ),
+                                isMaxZoomLevel = map.maxZoomLevel == map.cameraPosition.zoom
                             )
                         }
                 }
@@ -260,7 +262,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     LatLng(channelEvent.box.bottomLeft.y.toDouble(), channelEvent.box.bottomLeft.x.toDouble()),
                     LatLng(channelEvent.box.topRight.y.toDouble(), channelEvent.box.topRight.x.toDouble())
                 ),
-                0)
+                10)
         )
     }
 

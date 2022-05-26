@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.lang.Exception
 import javax.inject.Inject
+import kotlin.math.pow
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -38,6 +39,7 @@ class MainViewModel @Inject constructor(
     private val mapStateFlow = MutableStateFlow(MapModel())
 
     private var visibleRegion: MapRegionModel ?= null
+    private var isMaxZoomLevel: Boolean = false
     private var visibleTiles: List<MapTileRegionModel>? = null
     private var isPlaceEnabled = false
     private var isEventsEnabled = false
@@ -89,14 +91,15 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun onCameraMoved(visibleRegion: MapRegionModel) {
+    fun onCameraMoved(visibleRegion: MapRegionModel, isMaxZoomLevel: Boolean) {
         this.visibleRegion = visibleRegion
+        this.isMaxZoomLevel = isMaxZoomLevel
         quadTree = QuadTree(
             topRightX = visibleRegion.bottomRightLongitude.toFloat(),
             topRightY = visibleRegion.topLeftLatitude.toFloat(),
             bottomLeftX = visibleRegion.topLeftLongitude.toFloat(),
             bottomLeftY = visibleRegion.bottomRightLatitude.toFloat(),
-            capacity = 1
+            levels = QUAD_TREE_LEVELS_NUMBER
         )
 
         val visibleTiles = getTilesList(
@@ -274,58 +277,79 @@ class MainViewModel @Inject constructor(
             clusters.clear()
         }
 
-        pointsList.forEach { pointModel ->
-            quadTree.insert(
-                x = pointModel.location.longitude.toFloat(),
-                y = pointModel.location.latitude.toFloat(),
-                data = pointModel.id
-            )
-        }
+        if(pointsList.size > 4.0.pow(QUAD_TREE_LEVELS_NUMBER) && isMaxZoomLevel.not()) {
+            pointsList.forEach { pointModel ->
+                quadTree.insert(
+                    x = pointModel.location.longitude.toFloat(),
+                    y = pointModel.location.latitude.toFloat(),
+                    data = pointModel.id
+                )
+            }
 
-        val warmMap = quadTree.warmMap()
+            val warmMap = quadTree.warmMap()
 
-        warmMap.forEach { node ->
-            val nodePoints = node.getPoints()
-            if (nodePoints.size == 1) {
-                val point = points.find { it.id == nodePoints.first().second }
+            warmMap.forEach { node ->
+                val nodePoints = node.getPoints()
+                if (nodePoints.size == 1) {
+                    val point = points.find { it.id == nodePoints.first().second }
 
-                point?.let {
+                    point?.let {
+                        viewModelScope.launch {
+                            eventChannel.send(
+                                ChannelEvent.AddPoint(
+                                    id = point.id,
+                                    type = point.pointType,
+                                    name = point.name,
+                                    description = point.description,
+                                    lat = point.location.latitude,
+                                    lon = point.location.longitude
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    var resultX = 0f
+                    var resultY = 0f
+                    nodePoints.forEach {
+                        resultX += it.first.x / nodePoints.size
+                        resultY += it.first.y / nodePoints.size
+                    }
+
+                    clusters.add(node.id to node.boundingBox)
+
                     viewModelScope.launch {
                         eventChannel.send(
                             ChannelEvent.AddPoint(
-                                id = point.id,
-                                type = point.pointType,
-                                name = point.name,
-                                description = point.description,
-                                lat = point.location.latitude,
-                                lon = point.location.longitude
+                                id = node.id,
+                                type = PointType.CLUSTER,
+                                name = points.size.toString(),
+                                description = null,
+                                lat = resultY.toDouble(),
+                                lon = resultX.toDouble()
                             )
                         )
                     }
                 }
-            } else {
-                var resultX = 0f
-                var resultY = 0f
-                nodePoints.forEach {
-                    resultX += it.first.x/nodePoints.size
-                    resultY += it.first.y/nodePoints.size
-                }
-
-                clusters.add(node.id to node.boundingBox)
-
+            }
+        } else {
+            pointsList.forEach { pointModel ->
                 viewModelScope.launch {
                     eventChannel.send(
                         ChannelEvent.AddPoint(
-                            id = node.id,
-                            type = PointType.CLUSTER,
-                            name = points.size.toString(),
-                            description = null,
-                            lat = resultY.toDouble(),
-                            lon = resultX.toDouble()
+                            id = pointModel.id,
+                            type = pointModel.pointType,
+                            name = pointModel.name,
+                            description = pointModel.description,
+                            lat = pointModel.location.latitude,
+                            lon = pointModel.location.longitude
                         )
                     )
                 }
             }
         }
+    }
+
+    private companion object {
+        const val QUAD_TREE_LEVELS_NUMBER: Int = 2
     }
 }

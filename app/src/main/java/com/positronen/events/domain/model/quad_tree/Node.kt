@@ -4,7 +4,6 @@ import com.positronen.events.utils.Logger
 import java.util.*
 
 sealed class Node<Type>(
-    val capacity: Int,
     val levels: Int,
     val boundingBox: BoundingBox
 ) {
@@ -15,10 +14,9 @@ sealed class Node<Type>(
     operator fun contains(point: Point): Boolean = boundingBox.contains(point)
 
     class LeafNode<Type>(
-        capacity: Int,
         levels: Int,
         boundingBox: BoundingBox
-    ) : Node<Type>(capacity, levels, boundingBox) {
+    ) : Node<Type>(levels, boundingBox) {
 
         private val points = mutableListOf<Pair<Point, Type>>()
 
@@ -26,8 +24,6 @@ sealed class Node<Type>(
 
         override fun insert(point: Point, data: Type): Node<Type> {
             require(point in boundingBox) { "$point is outside of $this" }
-
-            Logger.debug("MainActivity: LeafNode: $point")
 
             return if (levels > 0 && points.isNotEmpty()) {
                 split().insert(point, data)
@@ -47,25 +43,7 @@ sealed class Node<Type>(
 
         override fun warmMap(): List<Node<Type>> {
 
-            Logger.debug("MainActivity: LeafNode: $this")
-
             return listOf(this)
-
-//            return when {
-//                points.isEmpty() -> emptyList()
-//                points.size == 1 -> points
-//                else -> {
-//                    var resultX = 0f
-//                    var resultY = 0f
-//
-//                    points.forEach {
-//                        resultX += it.first.x/points.size
-//                        resultY += it.first.y/points.size
-//                    }
-//
-//                    listOf(Point(resultX, resultY) to points.first().second)
-//                }
-//            }
         }
 
         fun getPoints(): List<Pair<Point, Type>> = points
@@ -80,20 +58,20 @@ sealed class Node<Type>(
 
             val nextLevel = levels - 1
 
-            val branch = BranchNode<Type>(capacity, levels, boundingBox,
-                quadrant1 = LeafNode(capacity, nextLevel, BoundingBox(
+            val branch = BranchNode<Type>(levels, boundingBox,
+                quadrant1 = LeafNode(nextLevel, BoundingBox(
                     bottomLeft = Point(x0 + centreX, y0 + centreY),
                     topRight = Point(x1, y1)
                 )),
-                quadrant2 = LeafNode(capacity, nextLevel, BoundingBox(
+                quadrant2 = LeafNode(nextLevel, BoundingBox(
                     bottomLeft = Point(x0, y0 + centreY),
                     topRight = Point(x0 + centreX, y1)
                 )),
-                quadrant3 = LeafNode(capacity, nextLevel, BoundingBox(
+                quadrant3 = LeafNode(nextLevel, BoundingBox(
                     bottomLeft = Point(x0, y0),
                     topRight = Point(x0 + centreX, y0 + centreY)
                 )),
-                quadrant4 = LeafNode(capacity, nextLevel, BoundingBox(
+                quadrant4 = LeafNode(nextLevel, BoundingBox(
                     bottomLeft = Point(x0 + centreX, y0),
                     topRight = Point(x1, y0 + centreY)
                 ))
@@ -105,24 +83,21 @@ sealed class Node<Type>(
         }
 
         override fun toString(): String {
-            return "LeafNode(capacity=$capacity, levels=$levels, boundingBox=$boundingBox, points=$points)"
+            return "LeafNode(levels=$levels, boundingBox=$boundingBox, points=$points)"
         }
     }
 
     class BranchNode<Type>(
-        capacity: Int,
         levels: Int,
         boundingBox: BoundingBox,
         private var quadrant1: Node<Type>,
         private var quadrant2: Node<Type>,
         private var quadrant3: Node<Type>,
         private var quadrant4: Node<Type>
-    ) : Node<Type>(capacity, levels, boundingBox) {
+    ) : Node<Type>(levels, boundingBox) {
 
         override fun insert(point: Point, data: Type): Node<Type> {
             require(point in this) { "$point is outside of $this" }
-
-            Logger.debug("MainActivity: BranchNode: $point")
 
             if (point.y >= quadrant1.boundingBox.bottomLeft.y) {
                 if (point.x >= quadrant1.boundingBox.bottomLeft.x) {
@@ -150,7 +125,7 @@ sealed class Node<Type>(
         }
 
         override fun toString(): String {
-            return "BranchNode(capacity=$capacity, levels=$levels, boundingBox=$boundingBox)"
+            return "BranchNode(levels=$levels, boundingBox=$boundingBox)"
         }
 
         override fun warmMap(): List<Node<Type>> {

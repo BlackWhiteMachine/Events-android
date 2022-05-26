@@ -5,7 +5,6 @@ class QuadTree<Type>(
     topRightY: Float,
     bottomLeftX: Float,
     bottomLeftY: Float,
-    capacity: Int = 200,
     levels: Int = 2
 ) {
 
@@ -14,7 +13,7 @@ class QuadTree<Type>(
         topRight = Point(topRightX, topRightY)
     )
 
-    private var root: Node<Type> = Node.LeafNode(capacity, levels, boundingBox)
+    private var root: Node<Type> = Node.LeafNode(levels, boundingBox)
 
     fun insert(x: Float, y: Float, data: Type) {
         root = root.insert(Point(x, y), data)
