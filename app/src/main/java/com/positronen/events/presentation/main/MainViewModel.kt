@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.positronen.events.data.location.LocationDataSource
 import com.positronen.events.domain.model.ChannelEvent
-import com.positronen.events.domain.model.DataResource
 import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointModel
@@ -40,6 +39,7 @@ class MainViewModel @Inject constructor(
 
     private var visibleRegion: MapRegionModel ?= null
     private var isMaxZoomLevel: Boolean = false
+    private var lastSelectedPoint: String? = null
     private var visibleTiles: List<MapTileRegionModel>? = null
     private var isPlaceEnabled = false
     private var isEventsEnabled = false
@@ -83,12 +83,17 @@ class MainViewModel @Inject constructor(
                 eventChannel.send(ChannelEvent.MoveCamera(box.second))
             }
         } else {
+            lastSelectedPoint = id
             viewModelScope.launch {
                 eventChannel.send(
                     ChannelEvent.ShowBottomSheet(id, type)
                 )
             }
         }
+    }
+
+    fun onMapClicked() {
+        lastSelectedPoint = null
     }
 
     fun onCameraMoved(visibleRegion: MapRegionModel, isMaxZoomLevel: Boolean) {
@@ -301,6 +306,7 @@ class MainViewModel @Inject constructor(
                                     type = point.pointType,
                                     name = point.name,
                                     description = point.description,
+                                    showInfoWindow = point.id == lastSelectedPoint,
                                     lat = point.location.latitude,
                                     lon = point.location.longitude
                                 )
@@ -324,6 +330,7 @@ class MainViewModel @Inject constructor(
                                 type = PointType.CLUSTER,
                                 name = points.size.toString(),
                                 description = null,
+                                showInfoWindow = false,
                                 lat = resultY.toDouble(),
                                 lon = resultX.toDouble()
                             )
@@ -340,6 +347,7 @@ class MainViewModel @Inject constructor(
                             type = pointModel.pointType,
                             name = pointModel.name,
                             description = pointModel.description,
+                            showInfoWindow = pointModel.id == lastSelectedPoint,
                             lat = pointModel.location.latitude,
                             lon = pointModel.location.longitude
                         )

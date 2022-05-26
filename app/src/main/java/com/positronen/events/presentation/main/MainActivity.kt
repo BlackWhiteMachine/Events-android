@@ -71,6 +71,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             }
             false
         }
+        map.setOnMapClickListener {
+            viewModel.onMapClicked()
+        }
 
         map.setOnCameraMoveListener(object : GoogleMap.OnCameraMoveListener {
 
@@ -237,6 +240,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         val marker = map.addMarker(markerOptions)
         marker?.let {
             it.tag = event
+            if (event.showInfoWindow) {
+                it.showInfoWindow()
+            }
             markersMap[event.id] = it
         }
     }

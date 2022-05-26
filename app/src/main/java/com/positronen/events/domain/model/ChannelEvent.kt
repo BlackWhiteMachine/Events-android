@@ -14,6 +14,7 @@ sealed class ChannelEvent {
         val type: PointType,
         val name: String,
         val description: String?,
+        val showInfoWindow: Boolean,
         val lat: Double,
         val lon: Double
     ) : ChannelEvent()
