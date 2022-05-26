@@ -9,6 +9,7 @@ import com.positronen.events.presentation.MainInteractor
 import com.positronen.events.utils.getTopLeft
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import java.lang.RuntimeException
 import javax.inject.Inject
 
 class MainInteractorImpl @Inject constructor(
@@ -46,6 +47,7 @@ class MainInteractorImpl @Inject constructor(
             PointType.PLACE -> mainRepository.place(id)
             PointType.EVENT -> mainRepository.event(id)
             PointType.ACTIVITY -> TODO()
+            else -> throw RuntimeException("No detail information about cluster")
         }
 
 

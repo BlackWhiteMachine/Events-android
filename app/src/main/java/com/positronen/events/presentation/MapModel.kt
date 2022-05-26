@@ -1,9 +1,8 @@
 package com.positronen.events.presentation
 
-import com.positronen.events.domain.model.DataResource
-import com.positronen.events.domain.model.PointModel
+import com.positronen.events.domain.model.Source
 
 data class MapModel(
-    val placesSource: DataResource<List<PointModel>> = DataResource.Init,
-    val eventsSource: DataResource<List<PointModel>> = DataResource.Init,
+    val placesSource: Source = Source.INIT,
+    val eventsSource: Source = Source.INIT
 )

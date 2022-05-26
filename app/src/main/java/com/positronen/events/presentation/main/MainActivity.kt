@@ -20,6 +20,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.positronen.events.R
@@ -64,8 +65,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         map = googleMap
 
         map.setOnMarkerClickListener { marker ->
-            (marker.tag as? String)?.let {
-                viewModel.onMarkerClicked(it)
+            (marker.tag as? ChannelEvent.AddPoint)?.let {
+                viewModel.onMarkerClicked(it.id, it.type)
             }
             false
         }
@@ -144,6 +145,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     is ChannelEvent.SetMyLocation -> setMyLocation(channelEvent)
                     is ChannelEvent.AddPoint -> addPoint(channelEvent)
                     is ChannelEvent.RemovePoint -> removePoint(channelEvent)
+                    is ChannelEvent.ClearMap -> clearMap()
+                    is ChannelEvent.MoveCamera -> moveCamera(channelEvent)
                     is ChannelEvent.ShowBottomSheet -> showBottomSheet(channelEvent)
                 }
             }
@@ -231,7 +234,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         }
         val marker = map.addMarker(markerOptions)
         marker?.let {
-            it.tag = event.id
+            it.tag = event
             markersMap[event.id] = it
         }
     }
@@ -240,6 +243,25 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         channelEvent.idsList.forEach { id ->
             markersMap.remove(id)?.remove()
         }
+    }
+
+    private fun clearMap() {
+        markersMap.values.forEach { marker ->
+            marker.remove()
+        }
+
+        markersMap.clear()
+    }
+
+    private fun moveCamera(channelEvent: ChannelEvent.MoveCamera) {
+        map.moveCamera(
+            CameraUpdateFactory.newLatLngBounds(
+                LatLngBounds(
+                    LatLng(channelEvent.box.bottomLeft.y.toDouble(), channelEvent.box.bottomLeft.x.toDouble()),
+                    LatLng(channelEvent.box.topRight.y.toDouble(), channelEvent.box.topRight.x.toDouble())
+                ),
+                0)
+        )
     }
 
     private companion object {

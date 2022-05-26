@@ -11,6 +11,9 @@ import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointModel
 import com.positronen.events.domain.model.PointType
+import com.positronen.events.domain.model.Source
+import com.positronen.events.domain.model.quad_tree.BoundingBox
+import com.positronen.events.domain.model.quad_tree.QuadTree
 import com.positronen.events.presentation.MainInteractor
 import com.positronen.events.presentation.MapModel
 import com.positronen.events.utils.Logger
@@ -40,6 +43,13 @@ class MainViewModel @Inject constructor(
     private var isEventsEnabled = false
     private var isActivitiesEnabled = false
 
+    private var quadTree: QuadTree<String> = QuadTree(
+        topRightX = 1f,
+        topRightY = 1f,
+        bottomLeftX = 0f,
+        bottomLeftY = 0f
+    )
+
     private val points: MutableList<PointModel> = mutableListOf()
 
     private val eventChannel = Channel<ChannelEvent>()
@@ -48,21 +58,11 @@ class MainViewModel @Inject constructor(
 
     val showLoading: Flow<Boolean>
         get() = mapStateFlow.map {
-            it.placesSource is DataResource.Loading || it.eventsSource is DataResource.Loading
+            it.placesSource == Source.LOADING || it.eventsSource == Source.LOADING
         }
 
     fun onMapReady() {
-        val placesSourceFlow = mapStateFlow.mapNotNull {
-            (it.placesSource as? DataResource.Success)?.data
-        }
-        val eventsSourceFlow = mapStateFlow.mapNotNull {
-            (it.eventsSource as? DataResource.Success)?.data
-        }
-        viewModelScope.launch {
-            merge(placesSourceFlow, eventsSourceFlow).collect { pointsList ->
-                addPointsToMap(pointsList)
-            }
-        }
+
     }
 
     fun onLocationPermissionGranted() {
@@ -73,17 +73,31 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun onMarkerClicked(id: String) {
-        val pointType = points.find { it.id == id }?.pointType ?: return
-        viewModelScope.launch {
-            eventChannel.send(
-                ChannelEvent.ShowBottomSheet(id, pointType)
-            )
+    fun onMarkerClicked(id: String, type: PointType) {
+        if (type == PointType.CLUSTER) {
+            val box = clusters.find { it.first == id } ?: return
+
+            viewModelScope.launch {
+                eventChannel.send(ChannelEvent.MoveCamera(box.second))
+            }
+        } else {
+            viewModelScope.launch {
+                eventChannel.send(
+                    ChannelEvent.ShowBottomSheet(id, type)
+                )
+            }
         }
     }
 
     fun onCameraMoved(visibleRegion: MapRegionModel) {
         this.visibleRegion = visibleRegion
+        quadTree = QuadTree(
+            topRightX = visibleRegion.bottomRightLongitude.toFloat(),
+            topRightY = visibleRegion.topLeftLatitude.toFloat(),
+            bottomLeftX = visibleRegion.topLeftLongitude.toFloat(),
+            bottomLeftY = visibleRegion.bottomRightLatitude.toFloat(),
+            capacity = 1
+        )
 
         val visibleTiles = getTilesList(
             visibleRegion = visibleRegion,
@@ -112,8 +126,10 @@ class MainViewModel @Inject constructor(
 
         points.removeAll(removeList)
 
+        clusters.clear()
+
         viewModelScope.launch {
-            eventChannel.send(ChannelEvent.RemovePoint(removeList.map { it.id }))
+            eventChannel.send(ChannelEvent.ClearMap)
         }
     }
 
@@ -128,11 +144,10 @@ class MainViewModel @Inject constructor(
                     removeList.add(it)
                 }
             }
-            viewModelScope.launch {
-                eventChannel.send(ChannelEvent.RemovePoint(removeList.map { it.id }))
-            }
             points.removeAll(removeList)
-            mapStateFlow.value = mapStateFlow.value.copy(placesSource = DataResource.Init)
+            mapStateFlow.value = mapStateFlow.value.copy(placesSource = Source.INIT)
+
+            updatePointsOnMap(points)
         }
     }
 
@@ -145,11 +160,10 @@ class MainViewModel @Inject constructor(
             points.forEach {
                 removeList.add(it)
             }
-            viewModelScope.launch {
-                eventChannel.send(ChannelEvent.RemovePoint(removeList.map { it.id }))
-            }
             points.removeAll(removeList)
-            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = DataResource.Init)
+            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = Source.INIT)
+
+            updatePointsOnMap(points)
         }
     }
 
@@ -159,25 +173,26 @@ class MainViewModel @Inject constructor(
 
     private fun obtainPlaces(visibleTilesList: List<MapTileRegionModel>) {
         viewModelScope.launch(Dispatchers.IO) {
-            mapStateFlow.value = mapStateFlow.value.copy(placesSource = DataResource.Loading)
+            mapStateFlow.value = mapStateFlow.value.copy(placesSource = Source.LOADING)
 
             val result = mutableListOf<PointModel>()
 
             mainInteractor.places(visibleTilesList)
                 .catch { error ->
                     mapStateFlow.value = mapStateFlow.value.copy(
-                        placesSource = DataResource.Error(error)
+                        placesSource = Source.ERROR
                     )
                     Logger.exception(Exception(error.message))
                 }
                 .onCompletion {
-                    val resultDataResource = if (isPlaceEnabled) {
-                        DataResource.Success(result)
+                    val resultSource = if (isPlaceEnabled) {
+                        Source.SUCCESS
                     } else {
-                        DataResource.Init
+                        Source.INIT
                     }
+                    handleResult(result)
                     mapStateFlow.value = mapStateFlow.value.copy(
-                        placesSource = resultDataResource
+                        placesSource = resultSource
                     )
                 }
                 .collect { placesList ->
@@ -192,25 +207,26 @@ class MainViewModel @Inject constructor(
 
     private fun obtainEvents(visibleTilesList: List<MapTileRegionModel>) {
         viewModelScope.launch(Dispatchers.IO) {
-            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = DataResource.Loading)
+            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = Source.LOADING)
 
             val result = mutableListOf<PointModel>()
 
             mainInteractor.events(visibleTilesList)
                 .catch { error ->
                     mapStateFlow.value = mapStateFlow.value.copy(
-                        eventsSource = DataResource.Error(error)
+                        eventsSource = Source.ERROR
                     )
                     Logger.exception(Exception(error.message))
                 }
                 .onCompletion {
-                    val resultDataResource = if (isPlaceEnabled) {
-                        DataResource.Success(result)
+                    val resultSource = if (isPlaceEnabled) {
+                        Source.SUCCESS
                     } else {
-                        DataResource.Init
+                        Source.INIT
                     }
+                    handleResult(result)
                     mapStateFlow.value = mapStateFlow.value.copy(
-                        eventsSource = resultDataResource
+                        eventsSource = resultSource
                     )
                 }
                 .collect { eventsList ->
@@ -223,23 +239,89 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    private fun handleResult(pointsList: List<PointModel>) {
+        viewModelScope.launch {
+            addPointsToMap(pointsList)
+        }
+    }
+
+    private val clusters = mutableListOf<Pair<String, BoundingBox>>()
+
     private fun addPointsToMap(pointsList: List<PointModel>) {
         val visibleRegion = this.visibleRegion ?: return
 
         pointsList.forEach { pointModel ->
             if (points.find { it.id == pointModel.id } != null) return@forEach
 
-            if (visibleRegion.isContains(pointModel.location.latitude, pointModel.location.longitude)) {
+            if (visibleRegion.isContains(
+                    pointModel.location.latitude,
+                    pointModel.location.longitude
+                )
+            ) {
                 points.add(pointModel)
+            }
+        }
+
+        updatePointsOnMap(points)
+    }
+
+    private fun updatePointsOnMap(pointsList: List<PointModel>) {
+        if (clusters.isNotEmpty()) {
+            viewModelScope.launch {
+                eventChannel.send(ChannelEvent.RemovePoint(clusters.map { it.first }))
+            }
+
+            clusters.clear()
+        }
+
+        pointsList.forEach { pointModel ->
+            quadTree.insert(
+                x = pointModel.location.longitude.toFloat(),
+                y = pointModel.location.latitude.toFloat(),
+                data = pointModel.id
+            )
+        }
+
+        val warmMap = quadTree.warmMap()
+
+        warmMap.forEach { node ->
+            val nodePoints = node.getPoints()
+            if (nodePoints.size == 1) {
+                val point = points.find { it.id == nodePoints.first().second }
+
+                point?.let {
+                    viewModelScope.launch {
+                        eventChannel.send(
+                            ChannelEvent.AddPoint(
+                                id = point.id,
+                                type = point.pointType,
+                                name = point.name,
+                                description = point.description,
+                                lat = point.location.latitude,
+                                lon = point.location.longitude
+                            )
+                        )
+                    }
+                }
+            } else {
+                var resultX = 0f
+                var resultY = 0f
+                nodePoints.forEach {
+                    resultX += it.first.x/nodePoints.size
+                    resultY += it.first.y/nodePoints.size
+                }
+
+                clusters.add(node.id to node.boundingBox)
 
                 viewModelScope.launch {
                     eventChannel.send(
                         ChannelEvent.AddPoint(
-                            id = pointModel.id,
-                            name = pointModel.name,
-                            description = pointModel.description,
-                            lat = pointModel.location.latitude,
-                            lon = pointModel.location.longitude
+                            id = node.id,
+                            type = PointType.CLUSTER,
+                            name = points.size.toString(),
+                            description = null,
+                            lat = resultY.toDouble(),
+                            lon = resultX.toDouble()
                         )
                     )
                 }

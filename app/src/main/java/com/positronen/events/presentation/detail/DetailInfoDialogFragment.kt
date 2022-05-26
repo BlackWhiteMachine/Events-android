@@ -80,6 +80,7 @@ class DetailInfoDialogFragment : BottomSheetDialogFragment() {
                         PointType.PLACE -> R.drawable.ic_baseline_home_work_24
                         PointType.EVENT -> R.drawable.ic_baseline_event_24
                         PointType.ACTIVITY -> R.drawable.ic_baseline_sports_24
+                        PointType.CLUSTER -> 0
                     }
                     val compoundDrawablePadding = resources.getDimension(R.dimen.horizontal_padding_medium)
                     titleTextView.setCompoundDrawablesWithIntrinsicBounds(typePointIcon, 0, 0, 0)
