@@ -227,7 +227,7 @@ class MainViewModel @Inject constructor(
                     Logger.exception(Exception(error.message))
                 }
                 .onCompletion {
-                    val resultSource = if (isPlaceEnabled) {
+                    val resultSource = if (isEventsEnabled) {
                         Source.SUCCESS
                     } else {
                         Source.INIT
