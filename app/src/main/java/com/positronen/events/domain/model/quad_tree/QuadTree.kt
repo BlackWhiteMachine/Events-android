@@ -5,7 +5,8 @@ class QuadTree<Type>(
     topRightY: Float,
     bottomLeftX: Float,
     bottomLeftY: Float,
-    levels: Int = 2
+    levels: Int = 1,
+    leafCapacity: Int = 1
 ) {
 
     private val boundingBox = BoundingBox(
@@ -13,10 +14,17 @@ class QuadTree<Type>(
         topRight = Point(topRightX, topRightY)
     )
 
-    private var root: Node<Type> = Node.LeafNode(levels, boundingBox)
+    private var root: Node<Type> = Node.LeafNode(levels, boundingBox, leafCapacity)
+
+    val size: Int
+        get() = root.size
 
     fun insert(x: Float, y: Float, data: Type) {
         root = root.insert(Point(x, y), data)
+    }
+
+    fun remove(data: Type) {
+        root = root.remove(data)
     }
 
     fun intersect(
