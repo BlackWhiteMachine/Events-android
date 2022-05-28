@@ -19,9 +19,10 @@ import com.positronen.events.utils.Logger
 import com.positronen.events.utils.getTileRegion
 import com.positronen.events.utils.getTilesList
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -35,6 +36,8 @@ class MainViewModel @Inject constructor(
     private val mainInteractor: MainInteractor
 ) : ViewModel() {
 
+    private val platesStateFlow = MutableStateFlow(Source.INIT)
+    private val eventsStateFlow = MutableStateFlow(Source.INIT)
     private val mapStateFlow = MutableStateFlow(MapModel())
 
     private var visibleRegion: MapRegionModel ?= null
@@ -42,7 +45,9 @@ class MainViewModel @Inject constructor(
     private var lastSelectedPoint: String? = null
     private var visibleTiles: List<MapTileRegionModel>? = null
     private var isPlaceEnabled = false
+    private var placesJob: Job? = null
     private var isEventsEnabled = false
+    private var eventsJob: Job? = null
     private var isActivitiesEnabled = false
 
     private var quadTree: QuadTree<String> = QuadTree(
@@ -59,9 +64,9 @@ class MainViewModel @Inject constructor(
         get() = eventChannel.receiveAsFlow()
 
     val showLoading: Flow<Boolean>
-        get() = mapStateFlow.map {
-            it.placesSource == Source.LOADING || it.eventsSource == Source.LOADING
-        }
+        get() = combine(platesStateFlow, eventsStateFlow) { platesState, eventsState ->
+        platesState == Source.LOADING || eventsState == Source.LOADING
+    }
 
     fun onMapReady() {
 
@@ -118,8 +123,12 @@ class MainViewModel @Inject constructor(
         this.visibleTiles = visibleTiles
 
         if (visibleTiles.isNotEmpty()) {
-            if (isPlaceEnabled) obtainPlaces(visibleTiles)
-            if (isEventsEnabled) obtainEvents(visibleTiles)
+            if (isPlaceEnabled) {
+                obtainPlaces(visibleTiles)
+            }
+            if (isEventsEnabled) {
+                obtainEvents(visibleTiles)
+            }
         }
 
         val removeList = mutableListOf<PointModel>()
@@ -144,8 +153,13 @@ class MainViewModel @Inject constructor(
     fun onPlaceFilterChanged(checked: Boolean) {
         isPlaceEnabled = checked
         if (isPlaceEnabled) {
-            visibleTiles?.let { obtainPlaces(it) }
+            visibleTiles?.let {
+                obtainPlaces(it)
+            }
         } else {
+            placesJob?.cancel()
+            placesJob = null
+
             val removeList = mutableListOf<PointModel>()
             points.forEach {
                 if (it.pointType == PointType.PLACE) {
@@ -162,8 +176,13 @@ class MainViewModel @Inject constructor(
     fun onEventsFilterChanged(checked: Boolean) {
         isEventsEnabled = checked
         if (isEventsEnabled) {
-            visibleTiles?.let { obtainEvents(it) }
+            visibleTiles?.let {
+                obtainEvents(it)
+            }
         } else {
+            eventsJob?.cancel()
+            eventsJob = null
+
             val removeList = mutableListOf<PointModel>()
             points.forEach {
                 removeList.add(it)
@@ -179,78 +198,51 @@ class MainViewModel @Inject constructor(
         isActivitiesEnabled = checked
     }
 
-    private fun obtainPlaces(visibleTilesList: List<MapTileRegionModel>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val currentVisibleRegion = visibleRegion
-            mapStateFlow.value = mapStateFlow.value.copy(placesSource = Source.LOADING)
-
-            val result = mutableListOf<PointModel>()
-
-            mainInteractor.places(visibleTilesList)
-                .catch { error ->
-                    mapStateFlow.value = mapStateFlow.value.copy(
-                        placesSource = Source.ERROR
-                    )
-                    Logger.exception(Exception(error.message))
-                }
-                .onCompletion {
-                    val resultSource = if (isPlaceEnabled) {
-                        Source.SUCCESS
-                    } else {
-                        Source.INIT
-                    }
-                    handleResult(result)
-                    mapStateFlow.value = mapStateFlow.value.copy(
-                        placesSource = resultSource
-                    )
-                }
-                .collect { placesList ->
-                    if (isPlaceEnabled && currentVisibleRegion == visibleRegion) {
-                        mapStateFlow.value = mapStateFlow.value.copy(
-                            placesSource = Source.LOADING
-                        )
-                        result.addAll(placesList)
-                    } else {
-                        cancel()
-                    }
-                }
+    private fun obtainPlaces(visibleTiles: List<MapTileRegionModel>) {
+        placesJob?.cancel()
+        placesJob = obtainPoints(mainInteractor.places(visibleTiles), platesStateFlow) { placesList ->
+            handleResult(placesList)
         }
     }
 
-    private fun obtainEvents(visibleTilesList: List<MapTileRegionModel>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val currentVisibleRegion = visibleRegion
-            mapStateFlow.value = mapStateFlow.value.copy(eventsSource = Source.LOADING)
+    private fun obtainEvents(visibleTiles: List<MapTileRegionModel>) {
+        eventsJob?.cancel()
+        eventsJob = obtainPoints(mainInteractor.events(visibleTiles), eventsStateFlow) { eventsList ->
+            handleResult(eventsList)
+        }
+    }
+
+    private fun obtainPoints(
+        pointsSource: Flow<List<PointModel>>,
+        stateFlow: MutableStateFlow<Source>,
+        onResult: (List<PointModel>) -> Unit
+    ): Job {
+        return viewModelScope.launch(Dispatchers.IO) {
+            stateFlow.value = Source.LOADING
 
             val result = mutableListOf<PointModel>()
 
-            mainInteractor.events(visibleTilesList)
+            pointsSource
                 .catch { error ->
-                    mapStateFlow.value = mapStateFlow.value.copy(
-                        eventsSource = Source.ERROR
-                    )
                     Logger.exception(Exception(error.message))
                 }
                 .onCompletion {
-                    val resultSource = if (isEventsEnabled) {
-                        Source.SUCCESS
-                    } else {
-                        Source.INIT
+                    when (it) {
+                        null -> {
+                            stateFlow.value = Source.SUCCESS
+                            onResult.invoke(result)
+                        }
+                        is CancellationException -> {
+                            stateFlow.value = Source.INIT
+                        }
+                        else -> {
+                            stateFlow.value = Source.ERROR
+                        }
                     }
-                    handleResult(result)
-                    mapStateFlow.value = mapStateFlow.value.copy(
-                        eventsSource = resultSource
-                    )
                 }
-                .collect { eventsList ->
-                    if (isEventsEnabled && currentVisibleRegion == visibleRegion) {
-                        mapStateFlow.value = mapStateFlow.value.copy(
-                            eventsSource = Source.LOADING
-                        )
-                        result.addAll(eventsList)
-                    } else {
-                        cancel()
-                    }
+                .collect { placesList ->
+                    stateFlow.value = Source.LOADING
+                    result.addAll(placesList)
                 }
         }
     }
