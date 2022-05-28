@@ -206,6 +206,9 @@ class MainViewModel @Inject constructor(
                 }
                 .collect { placesList ->
                     if (isPlaceEnabled && currentVisibleRegion == visibleRegion) {
+                        mapStateFlow.value = mapStateFlow.value.copy(
+                            placesSource = Source.LOADING
+                        )
                         result.addAll(placesList)
                     } else {
                         cancel()
@@ -241,6 +244,9 @@ class MainViewModel @Inject constructor(
                 }
                 .collect { eventsList ->
                     if (isEventsEnabled && currentVisibleRegion == visibleRegion) {
+                        mapStateFlow.value = mapStateFlow.value.copy(
+                            eventsSource = Source.LOADING
+                        )
                         result.addAll(eventsList)
                     } else {
                         cancel()
