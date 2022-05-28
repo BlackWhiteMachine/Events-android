@@ -23,11 +23,12 @@ class MainRepositoryImpl @Inject constructor(
     private val mainConverter: MainConverter = MainConverterImpl()
 
     override suspend fun places(tileRegion: MapTileRegionModel): List<PointModel> {
-        val centerLatitude = (tileRegion.topLeftLatitude + tileRegion.bottomRightLatitude) / 2
-        val centerLongitude = (tileRegion.topLeftLongitude + tileRegion.bottomRightLongitude) / 2
+        val mapRegionModel = tileRegion.mapRegionModel
+        val centerLatitude = (mapRegionModel.topLeftLatitude + mapRegionModel.bottomRightLatitude) / 2
+        val centerLongitude = (mapRegionModel.topLeftLongitude + mapRegionModel.bottomRightLongitude) / 2
         val distance = radius(
-            firstLatitude = tileRegion.topLeftLatitude,
-            firstLongitude = tileRegion.topLeftLongitude,
+            firstLatitude = mapRegionModel.topLeftLatitude,
+            firstLongitude = mapRegionModel.topLeftLongitude,
             secondLatitude = centerLatitude,
             secondLongitude = centerLongitude
         )
@@ -45,7 +46,7 @@ class MainRepositoryImpl @Inject constructor(
         }
 
         return mainConverter.convertResponsePlaces(resultList).filter {
-            tileRegion.isContains(
+            tileRegion.mapRegionModel.isContains(
                 it.location.latitude,
                 it.location.longitude,
             )
@@ -57,11 +58,12 @@ class MainRepositoryImpl @Inject constructor(
     }.mapNotNull(mainConverter::convertResponsePlaceDetail)
 
     override suspend fun events(tileRegion: MapTileRegionModel): List<PointModel>{
-        val centerLatitude = (tileRegion.topLeftLatitude + tileRegion.bottomRightLatitude) / 2
-        val centerLongitude = (tileRegion.topLeftLongitude + tileRegion.bottomRightLatitude) / 2
+        val mapRegionModel = tileRegion.mapRegionModel
+        val centerLatitude = (mapRegionModel.topLeftLatitude + mapRegionModel.bottomRightLatitude) / 2
+        val centerLongitude = (mapRegionModel.topLeftLongitude + mapRegionModel.bottomRightLatitude) / 2
         val distance = radius(
-            firstLatitude = tileRegion.topLeftLatitude,
-            firstLongitude = tileRegion.topLeftLongitude,
+            firstLatitude = mapRegionModel.topLeftLatitude,
+            firstLongitude = mapRegionModel.topLeftLongitude,
             secondLatitude = centerLatitude,
             secondLongitude = centerLongitude
         )
@@ -78,7 +80,7 @@ class MainRepositoryImpl @Inject constructor(
         }
 
         return mainConverter.convertResponseEvents(resultList).filter {
-            tileRegion.isContains(
+            tileRegion.mapRegionModel.isContains(
                 it.location.latitude,
                 it.location.longitude,
             )

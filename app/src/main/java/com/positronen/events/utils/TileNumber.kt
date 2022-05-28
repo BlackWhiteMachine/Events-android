@@ -54,9 +54,11 @@ fun getTileRegion(xTile: Int, yTile: Int, zoom: Int): MapTileRegionModel {
     return MapTileRegionModel(
         xTile = xTile,
         yTile = yTile,
-        topLeftLatitude = topLeftTileLat,
-        topLeftLongitude = topLeftTileLon,
-        bottomRightLatitude = bottomRightTileLat,
-        bottomRightLongitude = bottomRightTileLon
+        mapRegionModel = MapRegionModel(
+            topLeftLatitude = topLeftTileLat,
+            topLeftLongitude = topLeftTileLon,
+            bottomRightLatitude = bottomRightTileLat,
+            bottomRightLongitude = bottomRightTileLon
+        )
     )
 }

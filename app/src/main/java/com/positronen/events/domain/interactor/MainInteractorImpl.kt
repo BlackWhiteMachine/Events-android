@@ -1,6 +1,7 @@
 package com.positronen.events.domain.interactor
 
 import com.positronen.events.domain.MainRepository
+import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointModel
@@ -70,10 +71,12 @@ class MainInteractorImpl @Inject constructor(
         return MapTileRegionModel(
             xTile = xTile,
             yTile = yTile,
-            topLeftLatitude = topLeftTileLat,
-            topLeftLongitude = topLeftTileLon,
-            bottomRightLatitude = bottomRightTileLat,
-            bottomRightLongitude = bottomRightTileLon
+            mapRegionModel = MapRegionModel(
+                topLeftLatitude = topLeftTileLat,
+                topLeftLongitude = topLeftTileLon,
+                bottomRightLatitude = bottomRightTileLat,
+                bottomRightLongitude = bottomRightTileLon
+            )
         )
     }
 

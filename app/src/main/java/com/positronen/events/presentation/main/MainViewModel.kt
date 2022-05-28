@@ -181,6 +181,7 @@ class MainViewModel @Inject constructor(
 
     private fun obtainPlaces(visibleTilesList: List<MapTileRegionModel>) {
         viewModelScope.launch(Dispatchers.IO) {
+            val currentVisibleRegion = visibleRegion
             mapStateFlow.value = mapStateFlow.value.copy(placesSource = Source.LOADING)
 
             val result = mutableListOf<PointModel>()
@@ -204,7 +205,7 @@ class MainViewModel @Inject constructor(
                     )
                 }
                 .collect { placesList ->
-                    if (isPlaceEnabled) {
+                    if (isPlaceEnabled && currentVisibleRegion == visibleRegion) {
                         result.addAll(placesList)
                     } else {
                         cancel()
@@ -215,6 +216,7 @@ class MainViewModel @Inject constructor(
 
     private fun obtainEvents(visibleTilesList: List<MapTileRegionModel>) {
         viewModelScope.launch(Dispatchers.IO) {
+            val currentVisibleRegion = visibleRegion
             mapStateFlow.value = mapStateFlow.value.copy(eventsSource = Source.LOADING)
 
             val result = mutableListOf<PointModel>()
@@ -238,7 +240,7 @@ class MainViewModel @Inject constructor(
                     )
                 }
                 .collect { eventsList ->
-                    if (isEventsEnabled) {
+                    if (isEventsEnabled && currentVisibleRegion == visibleRegion) {
                         result.addAll(eventsList)
                     } else {
                         cancel()
