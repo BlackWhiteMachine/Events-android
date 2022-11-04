@@ -1,4 +1,4 @@
-package com.positronen.events.presentation
+package com.positronen.events.domain.interactor
 
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointDetailModel

@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointType
 import com.positronen.events.domain.model.detail.ChannelEventDetail
-import com.positronen.events.presentation.MainInteractor
+import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.utils.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel

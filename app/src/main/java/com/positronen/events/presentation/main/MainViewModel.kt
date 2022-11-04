@@ -13,7 +13,7 @@ import com.positronen.events.domain.model.PointType
 import com.positronen.events.domain.model.Source
 import com.positronen.events.domain.model.quad_tree.BoundingBox
 import com.positronen.events.domain.model.quad_tree.QuadTree
-import com.positronen.events.presentation.MainInteractor
+import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.presentation.MapModel
 import com.positronen.events.utils.Logger
 import com.positronen.events.utils.getTileRegion

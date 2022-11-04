@@ -6,7 +6,6 @@ import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointModel
 import com.positronen.events.domain.model.PointType
-import com.positronen.events.presentation.MainInteractor
 import com.positronen.events.utils.getTopLeft
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow

@@ -7,7 +7,7 @@ import com.positronen.events.domain.MainRepository
 import com.positronen.events.data.location.LocationDataSource
 import com.positronen.events.data.location.LocationDataSourceImpl
 import com.positronen.events.domain.interactor.MainInteractorImpl
-import com.positronen.events.presentation.MainInteractor
+import com.positronen.events.domain.interactor.MainInteractor
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
