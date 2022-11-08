@@ -1,11 +1,11 @@
 package com.positronen.events.di
 
-import com.positronen.events.BuildConfig
 import com.positronen.events.data.repository.MainRepositoryImpl
 import com.positronen.events.data.service.MainService
 import com.positronen.events.domain.MainRepository
 import com.positronen.events.data.location.LocationDataSource
 import com.positronen.events.data.location.LocationDataSourceImpl
+import com.positronen.events.data.service.MainServiceImpl
 import com.positronen.events.domain.interactor.MainInteractorImpl
 import com.positronen.events.domain.interactor.MainInteractor
 import dagger.Binds
@@ -13,38 +13,47 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ViewModelComponent
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 
 @Module
 @InstallIn(ViewModelComponent::class)
 class MainProvidesModule {
 
     @Provides
-    fun provideRetrofit(): Retrofit {
-        val client = OkHttpClient.Builder()
-            .addInterceptor(
-                HttpLoggingInterceptor().apply {
-                    if (BuildConfig.DEBUG) {
-                        setLevel(HttpLoggingInterceptor.Level.BODY);
-                    }
-                }
-            )
-            .build()
+    fun provideHttpClient(): HttpClient =
+        HttpClient(CIO) {
+            install(Logging) {
+                logger = Logger.SIMPLE
+                level = LogLevel.ALL
+            }
 
-        return Retrofit.Builder()
-            .baseUrl("https://open-api.myhelsinki.fi")
-            .addConverterFactory(GsonConverterFactory.create())
-            .client(client)
-            .build()
-    }
+            install(DefaultRequest)
 
-    @Provides
-    fun provideMainService(retrofit: Retrofit): MainService {
-        return retrofit.create(MainService::class.java)
-    }
+            install(ContentNegotiation) {
+                json(Json {
+                    isLenient = true
+                    ignoreUnknownKeys = true
+                    prettyPrint = true
+                })
+            }
+
+            install(HttpTimeout) {
+                connectTimeoutMillis = 15000
+                requestTimeoutMillis = 30000
+            }
+
+            defaultRequest {
+                url("https://open-api.myhelsinki.fi")
+                header("Content-Type", "application/json; charset=UTF-8")
+            }
+        }
 }
 
 @Module
@@ -56,6 +65,9 @@ abstract class MainModule {
 
     @Binds
     abstract fun bindMainRepository(impl: MainRepositoryImpl): MainRepository
+
+    @Binds
+    abstract fun bindMainService(impl: MainServiceImpl): MainService
 
     @Binds
     abstract fun bindsLocationDataSource(impl: LocationDataSourceImpl): LocationDataSource

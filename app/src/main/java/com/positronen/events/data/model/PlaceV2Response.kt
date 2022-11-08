@@ -1,26 +1,28 @@
 package com.positronen.events.data.model
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class PlaceV2Response(
-    @SerializedName(value = "id")
+    @SerialName(value = "id")
     val id: String,
-    @SerializedName(value = "name")
+    @SerialName(value = "name")
     val name: NameResponse,
-    @SerializedName(value = "source_type")
+    @SerialName(value = "source_type")
     val sourceType: SourceTypeResponse? = null,
-    @SerializedName(value = "info_url")
+    @SerialName(value = "info_url")
     val infoUrl: String? = null,
-    @SerializedName(value = "modified_at")
+    @SerialName(value = "modified_at")
     val modifiedAt: String? = null,
-    @SerializedName(value = "location")
+    @SerialName(value = "location")
     val location: LocationResponse? = null,
-    @SerializedName(value = "description")
-    val description: DescriptionResponse,
-    @SerializedName(value = "tags")
+    @SerialName(value = "description")
+    val description: DescriptionResponse? = null,
+    @SerialName(value = "tags")
     val tags: List<TagResponse>? = null,
-    @SerializedName(value = "extra_searchwords")
+    @SerialName(value = "extra_searchwords")
     val extraSearchwords: List<String>? = null,
-    @SerializedName(value = "opening_hours_url")
+    @SerialName(value = "opening_hours_url")
     val openingHoursUrl: String
 )

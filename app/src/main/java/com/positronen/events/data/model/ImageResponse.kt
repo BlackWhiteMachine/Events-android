@@ -1,13 +1,15 @@
 package com.positronen.events.data.model
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class ImageResponse(
     val url: String,
-    @SerializedName(value = "copyright_holder")
+    @SerialName(value = "copyright_holder")
     val copyrightHolder: String,
-    @SerializedName(value = "license_type")
+    @SerialName(value = "license_type")
     val licenseType: LicenseTypeResponse,
-    @SerializedName(value = "media_id")
+    @SerialName(value = "media_id")
     val mediaId: String
 )

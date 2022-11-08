@@ -2,7 +2,6 @@ package com.positronen.events.data.converter
 
 import com.positronen.events.data.model.*
 import com.positronen.events.domain.model.*
-import java.util.*
 
 class MainConverterImpl : MainConverter {
 
@@ -18,8 +17,8 @@ class MainConverterImpl : MainConverter {
             id = place.id,
             pointType = PointType.PLACE,
             name = name,
-            description = place.description.body.ifEmpty { place.description.intro },
-            images = place.description.images.map(::mapImages),
+            description = place.description?.body?.ifEmpty { place.description.intro },
+            images = place.description?.images?.map(::mapImages) ?: emptyList(),
             location = convertLocation(location),
             infoUrl = place.infoUrl,
         )
@@ -37,8 +36,8 @@ class MainConverterImpl : MainConverter {
             id = event.id,
             pointType = PointType.EVENT,
             name = name,
-            description = event.description.body.ifEmpty { event.description.intro },
-            images = event.description.images.map(::mapImages),
+            description = event.description?.body?.ifEmpty { event.description.intro },
+            images = event.description?.images?.map(::mapImages) ?: emptyList(),
             location = convertLocation(location),
             infoUrl = event.infoUrl,
         )
@@ -52,7 +51,7 @@ class MainConverterImpl : MainConverter {
             id = place.id,
             pointType = PointType.PLACE,
             name = name,
-            description = place.description.intro,
+            description = place.description?.intro,
             location = convertLocation(location)
         )
     }
@@ -65,7 +64,7 @@ class MainConverterImpl : MainConverter {
             id = place.id,
             pointType = PointType.EVENT,
             name = name,
-            description = place.description.intro,
+            description = place.description?.intro,
             location = convertLocation(location)
         )
     }
