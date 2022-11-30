@@ -3,14 +3,12 @@ package com.positronen.events.data.location
 import android.content.Context
 import android.location.Location
 import com.google.android.gms.location.*
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.mapNotNull
 import javax.inject.Inject
 
 class LocationDataSourceImpl @Inject constructor(
-    @ApplicationContext
     private val context: Context
 ): LocationDataSource {
 

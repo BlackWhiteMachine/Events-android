@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalCoroutinesApi::class)
-
 package com.positronen.events.presentation.main
 
 import androidx.lifecycle.ViewModel
@@ -18,19 +16,21 @@ import com.positronen.events.presentation.MapModel
 import com.positronen.events.utils.Logger
 import com.positronen.events.utils.getTileRegion
 import com.positronen.events.utils.getTilesList
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import java.lang.Exception
 import javax.inject.Inject
 import kotlin.math.pow
 
-@HiltViewModel
 class MainViewModel @Inject constructor(
     private val locationDataSource: LocationDataSource,
     private val mainInteractor: MainInteractor
@@ -59,9 +59,9 @@ class MainViewModel @Inject constructor(
 
     private val points: MutableList<PointModel> = mutableListOf()
 
-    private val eventChannel = Channel<ChannelEvent>()
-    val eventFlow: Flow<ChannelEvent>
-        get() = eventChannel.receiveAsFlow()
+    private val eventChannel = MutableSharedFlow<ChannelEvent>()
+    val eventFlow: SharedFlow<ChannelEvent>
+        get() = eventChannel
 
     val showLoading: Flow<Boolean>
         get() = combine(platesStateFlow, eventsStateFlow) { platesState, eventsState ->
@@ -75,7 +75,7 @@ class MainViewModel @Inject constructor(
     fun onLocationPermissionGranted() {
         viewModelScope.launch {
             locationDataSource.location().collect { (latitude, longitude) ->
-                eventChannel.send(ChannelEvent.SetMyLocation(latitude, longitude))
+                eventChannel.emit(ChannelEvent.SetMyLocation(latitude, longitude))
             }
         }
     }
@@ -85,12 +85,12 @@ class MainViewModel @Inject constructor(
             val box = clusters.find { it.first == id } ?: return
 
             viewModelScope.launch {
-                eventChannel.send(ChannelEvent.MoveCamera(box.second))
+                eventChannel.emit(ChannelEvent.MoveCamera(box.second))
             }
         } else {
             lastSelectedPoint = id
             viewModelScope.launch {
-                eventChannel.send(
+                eventChannel.emit(
                     ChannelEvent.ShowBottomSheet(id, type)
                 )
             }
@@ -101,9 +101,12 @@ class MainViewModel @Inject constructor(
         lastSelectedPoint = null
     }
 
-    fun onCameraMoved(visibleRegion: MapRegionModel, isMaxZoomLevel: Boolean) {
+    fun onCameraMoved(zoomLevel: Int, visibleRegion: MapRegionModel, isMaxZoomLevel: Boolean) {
         this.visibleRegion = visibleRegion
         this.isMaxZoomLevel = isMaxZoomLevel
+
+        if (zoomLevel < MIN_ZOOM_LEVEL) return
+
         quadTree = QuadTree(
             topRightX = visibleRegion.bottomRightLongitude.toFloat(),
             topRightY = visibleRegion.topLeftLatitude.toFloat(),
@@ -119,6 +122,9 @@ class MainViewModel @Inject constructor(
             .map { (xTile, yTile) ->
                 getTileRegion(xTile, yTile, mainInteractor.defaultDataZoomLevel)
             }
+
+
+        Logger.debug("MainViewModel: onCameraMoved: visibleTiles: ${visibleTiles.size}")
 
         this.visibleTiles = visibleTiles
 
@@ -146,7 +152,7 @@ class MainViewModel @Inject constructor(
         clusters.clear()
 
         viewModelScope.launch {
-            eventChannel.send(ChannelEvent.ClearMap)
+            eventChannel.emit(ChannelEvent.ClearMap)
         }
     }
 
@@ -276,7 +282,7 @@ class MainViewModel @Inject constructor(
     private fun updatePointsOnMap(pointsList: List<PointModel>) {
         if (clusters.isNotEmpty()) {
             viewModelScope.launch {
-                eventChannel.send(ChannelEvent.RemovePoint(clusters.map { it.first }))
+                eventChannel.emit(ChannelEvent.RemovePoint(clusters.map { it.first }))
             }
 
             clusters.clear()
@@ -300,7 +306,7 @@ class MainViewModel @Inject constructor(
 
                     point?.let {
                         viewModelScope.launch {
-                            eventChannel.send(
+                            eventChannel.emit(
                                 ChannelEvent.AddPoint(
                                     id = point.id,
                                     type = point.pointType,
@@ -324,7 +330,7 @@ class MainViewModel @Inject constructor(
                     clusters.add(node.id to node.boundingBox)
 
                     viewModelScope.launch {
-                        eventChannel.send(
+                        eventChannel.emit(
                             ChannelEvent.AddPoint(
                                 id = node.id,
                                 type = PointType.CLUSTER,
@@ -341,7 +347,7 @@ class MainViewModel @Inject constructor(
         } else {
             pointsList.forEach { pointModel ->
                 viewModelScope.launch {
-                    eventChannel.send(
+                    eventChannel.emit(
                         ChannelEvent.AddPoint(
                             id = pointModel.id,
                             type = pointModel.pointType,
@@ -358,6 +364,7 @@ class MainViewModel @Inject constructor(
     }
 
     private companion object {
+        const val MIN_ZOOM_LEVEL: Int = 11
         const val QUAD_TREE_LEVELS_NUMBER: Int = 2
     }
 }

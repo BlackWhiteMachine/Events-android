@@ -18,17 +18,16 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.positronen.events.EventsApplication
 import com.positronen.events.R
 import com.positronen.events.databinding.BottomSheetLayoutBinding
 import com.positronen.events.domain.model.PointType
 import com.positronen.events.domain.model.detail.ChannelEventDetail
 import com.positronen.events.utils.Logger
 import com.positronen.events.utils.toPx
-import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.collect
+import javax.inject.Inject
 import kotlin.math.roundToInt
 
-@AndroidEntryPoint
 class DetailInfoDialogFragment : BottomSheetDialogFragment() {
 
     companion object {
@@ -37,6 +36,9 @@ class DetailInfoDialogFragment : BottomSheetDialogFragment() {
         const val ID_AGR: String = "ID"
         const val POINT_TYPE_AGR: String = "POINT_TYPE"
     }
+
+    @Inject
+    lateinit var viewModelFactory: ViewModelProvider.Factory
 
     private lateinit var binding: BottomSheetLayoutBinding
     private lateinit var viewModel: DetailViewModel
@@ -47,6 +49,9 @@ class DetailInfoDialogFragment : BottomSheetDialogFragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = BottomSheetLayoutBinding.bind(inflater.inflate(R.layout.bottom_sheet_layout, container))
+
+        (activity?.application as EventsApplication).component.inject(this)
+
         return binding.root
     }
 
@@ -60,7 +65,7 @@ class DetailInfoDialogFragment : BottomSheetDialogFragment() {
         binding.imagesRecyclerView.adapter = imageAdapter
         binding.imagesRecyclerView.addItemDecoration(DividerItemDecoration(DIVIDE_SIZE.toPx.roundToInt()))
 
-        viewModel = ViewModelProvider(this)[DetailViewModel::class.java]
+        viewModel = ViewModelProvider(this, viewModelFactory)[DetailViewModel::class.java]
         viewModel.onViewInit(id, pointType)
         binding.initListeners()
         viewModel.initSubscribers()

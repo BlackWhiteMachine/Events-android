@@ -23,46 +23,53 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.positronen.events.EventsApplication
 import com.positronen.events.R
 import com.positronen.events.databinding.ActivityMapsBinding
 import com.positronen.events.domain.model.ChannelEvent
 import com.positronen.events.domain.model.MapRegionModel
+import com.positronen.events.presentation.base.ViewModelFactory
 import com.positronen.events.presentation.detail.DetailInfoDialogFragment
 import com.positronen.events.utils.Logger
-import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@AndroidEntryPoint
-class MainActivity : AppCompatActivity(), OnMapReadyCallback {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var map: GoogleMap
     private lateinit var binding: ActivityMapsBinding
 
-    private lateinit var viewModel: MainViewModel
+    @Inject
+    lateinit var viewModelFactory: ViewModelProvider.Factory
+
+    private val viewModel by lazy {
+        ViewModelProvider(
+            this,
+            viewModelFactory
+        )[MainViewModel::class.java]
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         binding = ActivityMapsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        (application as EventsApplication).component.inject(this)
 
-        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(::onMapReady)
 
         binding.initListeners()
     }
 
-    override fun onMapReady(googleMap: GoogleMap) {
+    private fun onMapReady(googleMap: GoogleMap) {
         map = googleMap
 
         map.setOnMarkerClickListener { marker ->
@@ -90,7 +97,11 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                         .collect {
                             val visibleRegion = map.projection.visibleRegion
 
+                            Logger.debug("MainViewModel: map.maxZoomLevel: ${map.maxZoomLevel}")
+                            Logger.debug("MainViewModel: map.cameraPosition.zoom: ${map.cameraPosition.zoom}")
+
                             viewModel.onCameraMoved(
+                                map.cameraPosition.zoom.toInt(),
                                 MapRegionModel(
                                     topLeftLatitude = visibleRegion.farLeft.latitude,
                                     topLeftLongitude = visibleRegion.farLeft.longitude,

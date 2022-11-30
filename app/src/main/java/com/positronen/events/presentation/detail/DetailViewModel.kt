@@ -7,14 +7,12 @@ import com.positronen.events.domain.model.PointType
 import com.positronen.events.domain.model.detail.ChannelEventDetail
 import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.utils.Logger
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.lang.Exception
 import javax.inject.Inject
 
-@HiltViewModel
 class DetailViewModel @Inject constructor(
     private val interactor: MainInteractor
 ) : ViewModel() {
