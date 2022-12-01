@@ -22,11 +22,9 @@ import com.google.android.gms.maps.model.MarkerOptions
 import com.positronen.events.EventsApplication
 import com.positronen.events.R
 import com.positronen.events.databinding.ActivityMapsBinding
-import com.positronen.events.domain.model.ChannelEvent
 import com.positronen.events.domain.model.MapRegionModel
-import com.positronen.events.presentation.base.BaseActivity
 import com.positronen.events.presentation.detail.DetailInfoDialogFragment
-import com.positronen.events.utils.Logger
+import com.positronen.events.presentation.mvi.BaseMVIActivity
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
@@ -36,7 +34,7 @@ import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-class MainActivity : BaseActivity<MainViewModel>() {
+class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewModel>() {
 
     private lateinit var map: GoogleMap
     private lateinit var binding: ActivityMapsBinding
@@ -54,17 +52,36 @@ class MainActivity : BaseActivity<MainViewModel>() {
         binding.initListeners()
     }
 
+    override fun handleState(state: MainState) {
+        when (state) {
+            is MainState.Loading -> {
+                binding.loaderProgressBar.isVisible = state.isShowing // true // isShowing
+            }
+        }
+    }
+
+    override fun handleEvent(state: MainEvent) {
+        when (state) {
+            is MainEvent.SetMyLocation -> setMyLocation(state)
+            is MainEvent.AddPoint -> addPoint(state)
+            is MainEvent.RemovePoint -> removePoint(state)
+            is MainEvent.ClearMap -> clearMap()
+            is MainEvent.MoveCamera -> moveCamera(state)
+            is MainEvent.ShowBottomSheet -> showBottomSheet(state)
+        }
+    }
+
     private fun onMapReady(googleMap: GoogleMap) {
         map = googleMap
 
         map.setOnMarkerClickListener { marker ->
-            (marker.tag as? ChannelEvent.AddPoint)?.let {
-                viewModel.onMarkerClicked(it.id, it.type)
+            (marker.tag as? MainEvent.AddPoint)?.let { event ->
+                viewModel.sendIntent(MainIntent.MarkerClicked(event.id, event.type))
             }
             false
         }
         map.setOnMapClickListener {
-            viewModel.onMapClicked()
+            viewModel.sendIntent(MainIntent.MapClicked)
         }
 
         map.setOnCameraMoveListener(object : GoogleMap.OnCameraMoveListener {
@@ -82,18 +99,17 @@ class MainActivity : BaseActivity<MainViewModel>() {
                         .collect {
                             val visibleRegion = map.projection.visibleRegion
 
-                            Logger.debug("MainViewModel: map.maxZoomLevel: ${map.maxZoomLevel}")
-                            Logger.debug("MainViewModel: map.cameraPosition.zoom: ${map.cameraPosition.zoom}")
-
-                            viewModel.onCameraMoved(
-                                map.cameraPosition.zoom.toInt(),
-                                MapRegionModel(
-                                    topLeftLatitude = visibleRegion.farLeft.latitude,
-                                    topLeftLongitude = visibleRegion.farLeft.longitude,
-                                    bottomRightLatitude = visibleRegion.nearRight.latitude,
-                                    bottomRightLongitude = visibleRegion.nearRight.longitude
-                                ),
-                                isMaxZoomLevel = map.maxZoomLevel == map.cameraPosition.zoom
+                            viewModel.sendIntent(
+                                MainIntent.CameraMoved(
+                                    map.cameraPosition.zoom.toInt(),
+                                    MapRegionModel(
+                                        topLeftLatitude = visibleRegion.farLeft.latitude,
+                                        topLeftLongitude = visibleRegion.farLeft.longitude,
+                                        bottomRightLatitude = visibleRegion.nearRight.latitude,
+                                        bottomRightLongitude = visibleRegion.nearRight.longitude
+                                    ),
+                                    isMaxZoomLevel = map.maxZoomLevel == map.cameraPosition.zoom
+                                )
                             )
                         }
                 }
@@ -111,52 +127,31 @@ class MainActivity : BaseActivity<MainViewModel>() {
         map.uiSettings.isZoomControlsEnabled = true
         map.moveCamera(CameraUpdateFactory.zoomTo(18F))
 
-        initObserver()
         showRequestPermission(
             Manifest.permission.ACCESS_FINE_LOCATION,
             R.string.main_activity_request_permission_rationale_message,
             requestLocationPermissionLauncher
         )
 
-        viewModel.onMapReady()
+        mviViewModel
+        viewModel.sendIntent(MainIntent.MapReady)
     }
 
     private fun ActivityMapsBinding.initListeners() {
         placeCheckedTextView.setOnClickListener {
             val isChecked = placeCheckedTextView.isChecked.not()
             placeCheckedTextView.isChecked = isChecked
-            viewModel.onPlaceFilterChanged(isChecked)
+            viewModel.sendIntent(MainIntent.PlaceFilterChanged(isChecked))
         }
         eventsCheckedTextView.setOnClickListener {
             val isChecked = eventsCheckedTextView.isChecked.not()
             eventsCheckedTextView.isChecked = isChecked
-            viewModel.onEventsFilterChanged(isChecked)
+            viewModel.sendIntent(MainIntent.EventsFilterChanged(isChecked))
         }
         activitiesCheckedTextView.setOnClickListener {
             val isChecked = activitiesCheckedTextView.isChecked.not()
             activitiesCheckedTextView.isChecked = isChecked
-            viewModel.onActivitiesFilterChanged(isChecked)
-        }
-    }
-
-    private fun initObserver() {
-        baseCoroutineScope.launchWhenStarted {
-            viewModel.eventFlow.collect { channelEvent ->
-                when (channelEvent) {
-                    is ChannelEvent.SetMyLocation -> setMyLocation(channelEvent)
-                    is ChannelEvent.AddPoint -> addPoint(channelEvent)
-                    is ChannelEvent.RemovePoint -> removePoint(channelEvent)
-                    is ChannelEvent.ClearMap -> clearMap()
-                    is ChannelEvent.MoveCamera -> moveCamera(channelEvent)
-                    is ChannelEvent.ShowBottomSheet -> showBottomSheet(channelEvent)
-                }
-            }
-        }
-
-        baseCoroutineScope.launchWhenStarted {
-            viewModel.showLoading.collect { isShowing ->
-                binding.loaderProgressBar.isVisible = isShowing
-            }
+            viewModel.sendIntent(MainIntent.ActivitiesFilterChanged(isChecked))
         }
     }
 
@@ -206,10 +201,10 @@ class MainActivity : BaseActivity<MainViewModel>() {
     private fun onLocationPermissionGranted() {
         map.isMyLocationEnabled = true
 
-        viewModel.onLocationPermissionGranted()
+        viewModel.sendIntent(MainIntent.LocationPermissionGranted)
     }
 
-    private fun showBottomSheet(event: ChannelEvent.ShowBottomSheet) {
+    private fun showBottomSheet(event: MainEvent.ShowBottomSheet) {
         val bottomSheetFragment = DetailInfoDialogFragment()
         val bundle = Bundle()
         bundle.putString(DetailInfoDialogFragment.ID_AGR, event.id)
@@ -218,7 +213,7 @@ class MainActivity : BaseActivity<MainViewModel>() {
         bottomSheetFragment.show(supportFragmentManager, "Detail")
     }
 
-    private fun setMyLocation(event: ChannelEvent.SetMyLocation) {
+    private fun setMyLocation(event: MainEvent.SetMyLocation) {
         val point = LatLng(event.lat, event.lon)
 
         map.moveCamera(CameraUpdateFactory.newLatLng(point))
@@ -226,7 +221,7 @@ class MainActivity : BaseActivity<MainViewModel>() {
 
     private val markersMap: MutableMap<String, Marker> = mutableMapOf()
 
-    private fun addPoint(event: ChannelEvent.AddPoint) {
+    private fun addPoint(event: MainEvent.AddPoint) {
         val markerOptions = MarkerOptions()
             .position(LatLng(event.lat, event.lon))
             .title(event.name)
@@ -243,7 +238,7 @@ class MainActivity : BaseActivity<MainViewModel>() {
         }
     }
 
-    private fun removePoint(channelEvent: ChannelEvent.RemovePoint) {
+    private fun removePoint(channelEvent: MainEvent.RemovePoint) {
         channelEvent.idsList.forEach { id ->
             markersMap.remove(id)?.remove()
         }
@@ -257,7 +252,7 @@ class MainActivity : BaseActivity<MainViewModel>() {
         markersMap.clear()
     }
 
-    private fun moveCamera(channelEvent: ChannelEvent.MoveCamera) {
+    private fun moveCamera(channelEvent: MainEvent.MoveCamera) {
         map.moveCamera(
             CameraUpdateFactory.newLatLngBounds(
                 LatLngBounds(

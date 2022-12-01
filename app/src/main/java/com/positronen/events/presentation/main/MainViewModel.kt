@@ -1,7 +1,6 @@
 package com.positronen.events.presentation.main
 
 import com.positronen.events.data.location.LocationDataSource
-import com.positronen.events.domain.model.ChannelEvent
 import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointModel
@@ -11,7 +10,7 @@ import com.positronen.events.domain.model.quad_tree.BoundingBox
 import com.positronen.events.domain.model.quad_tree.QuadTree
 import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.presentation.MapModel
-import com.positronen.events.presentation.base.BaseViewModel
+import com.positronen.events.presentation.mvi.BaseMVIViewModel
 import com.positronen.events.utils.Logger
 import com.positronen.events.utils.getTileRegion
 import com.positronen.events.utils.getTilesList
@@ -19,9 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onCompletion
@@ -33,7 +30,9 @@ import kotlin.math.pow
 class MainViewModel @Inject constructor(
     private val locationDataSource: LocationDataSource,
     private val mainInteractor: MainInteractor
-) : BaseViewModel() {
+) : BaseMVIViewModel<MainState, MainEvent, MainIntent>(
+    MainState.Init
+) {
 
     private val platesStateFlow = MutableStateFlow(Source.INIT)
     private val eventsStateFlow = MutableStateFlow(Source.INIT)
@@ -58,64 +57,74 @@ class MainViewModel @Inject constructor(
 
     private val points: MutableList<PointModel> = mutableListOf()
 
-    private val eventChannel = MutableSharedFlow<ChannelEvent>()
-    val eventFlow: SharedFlow<ChannelEvent>
-        get() = eventChannel
+    override fun handleIntent(intent: MainIntent) {
+        when (intent) {
+            is MainIntent.CameraMoved -> onCameraMoved(intent)
+            MainIntent.LocationPermissionGranted -> onLocationPermissionGranted()
+            MainIntent.MapClicked -> onMapClicked()
+            MainIntent.MapReady -> onMapReady()
+            is MainIntent.MarkerClicked -> onMarkerClicked(intent)
+            is MainIntent.PlaceFilterChanged -> onPlaceFilterChanged(intent)
+            is MainIntent.EventsFilterChanged -> onEventsFilterChanged(intent)
+            is MainIntent.ActivitiesFilterChanged -> onActivitiesFilterChanged(intent)
+        }
+    }
 
-    val showLoading: Flow<Boolean>
+    private val showLoading: Flow<Boolean>
         get() = combine(platesStateFlow, eventsStateFlow) { platesState, eventsState ->
         platesState == Source.LOADING || eventsState == Source.LOADING
     }
 
-    fun onMapReady() {
-
+    private fun onMapReady() {
+        baseCoroutineScope.launch {
+            showLoading.collect { isShowing ->
+                updateState {
+                    MainState.Loading(isShowing)
+                }
+            }
+        }
     }
 
-    fun onLocationPermissionGranted() {
+    private fun onLocationPermissionGranted() {
         baseCoroutineScope.launch {
             locationDataSource.location().collect { (latitude, longitude) ->
-                eventChannel.emit(ChannelEvent.SetMyLocation(latitude, longitude))
+                sendEvent(MainEvent.SetMyLocation(latitude, longitude))
             }
         }
     }
 
-    fun onMarkerClicked(id: String, type: PointType) {
-        if (type == PointType.CLUSTER) {
-            val box = clusters.find { it.first == id } ?: return
+    private fun onMarkerClicked(markerClicked: MainIntent.MarkerClicked) {
+        if (markerClicked.type == PointType.CLUSTER) {
+            val box = clusters.find { it.first == markerClicked.id } ?: return
 
-            baseCoroutineScope.launch {
-                eventChannel.emit(ChannelEvent.MoveCamera(box.second))
-            }
+            sendEvent(MainEvent.MoveCamera(box.second))
         } else {
-            lastSelectedPoint = id
-            baseCoroutineScope.launch {
-                eventChannel.emit(
-                    ChannelEvent.ShowBottomSheet(id, type)
-                )
-            }
+            lastSelectedPoint = markerClicked.id
+            sendEvent(MainEvent.ShowBottomSheet(markerClicked.id, markerClicked.type))
         }
     }
 
-    fun onMapClicked() {
+    private fun onMapClicked() {
         lastSelectedPoint = null
     }
 
-    fun onCameraMoved(zoomLevel: Int, visibleRegion: MapRegionModel, isMaxZoomLevel: Boolean) {
-        this.visibleRegion = visibleRegion
-        this.isMaxZoomLevel = isMaxZoomLevel
 
-        if (zoomLevel < MIN_ZOOM_LEVEL) return
+    private fun onCameraMoved(cameraMoved: MainIntent.CameraMoved) {
+        this.visibleRegion = cameraMoved.visibleRegion
+        this.isMaxZoomLevel = cameraMoved.isMaxZoomLevel
+
+        if (cameraMoved.zoomLevel < MIN_ZOOM_LEVEL) return
 
         quadTree = QuadTree(
-            topRightX = visibleRegion.bottomRightLongitude.toFloat(),
-            topRightY = visibleRegion.topLeftLatitude.toFloat(),
-            bottomLeftX = visibleRegion.topLeftLongitude.toFloat(),
-            bottomLeftY = visibleRegion.bottomRightLatitude.toFloat(),
+            topRightX = cameraMoved.visibleRegion.bottomRightLongitude.toFloat(),
+            topRightY = cameraMoved.visibleRegion.topLeftLatitude.toFloat(),
+            bottomLeftX = cameraMoved.visibleRegion.topLeftLongitude.toFloat(),
+            bottomLeftY = cameraMoved.visibleRegion.bottomRightLatitude.toFloat(),
             levels = QUAD_TREE_LEVELS_NUMBER
         )
 
         val visibleTiles = getTilesList(
-            visibleRegion = visibleRegion,
+            visibleRegion = cameraMoved.visibleRegion,
             zoom = mainInteractor.defaultDataZoomLevel
         )
             .map { (xTile, yTile) ->
@@ -139,7 +148,7 @@ class MainViewModel @Inject constructor(
         val removeList = mutableListOf<PointModel>()
 
         points.forEach {
-            val contains = visibleRegion.isContains(it.location.latitude, it.location.longitude).not()
+            val contains = cameraMoved.visibleRegion.isContains(it.location.latitude, it.location.longitude).not()
 
             if (contains) {
                 removeList.add(it)
@@ -150,13 +159,11 @@ class MainViewModel @Inject constructor(
 
         clusters.clear()
 
-        baseCoroutineScope.launch {
-            eventChannel.emit(ChannelEvent.ClearMap)
-        }
+        sendEvent(MainEvent.ClearMap)
     }
 
-    fun onPlaceFilterChanged(checked: Boolean) {
-        isPlaceEnabled = checked
+    private fun onPlaceFilterChanged(placeFilterChanged: MainIntent.PlaceFilterChanged) {
+        isPlaceEnabled = placeFilterChanged.isChecked
         if (isPlaceEnabled) {
             visibleTiles?.let {
                 obtainPlaces(it)
@@ -178,8 +185,8 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun onEventsFilterChanged(checked: Boolean) {
-        isEventsEnabled = checked
+    private fun onEventsFilterChanged(eventsFilterChanged: MainIntent.EventsFilterChanged) {
+        isEventsEnabled = eventsFilterChanged.isChecked
         if (isEventsEnabled) {
             visibleTiles?.let {
                 obtainEvents(it)
@@ -199,8 +206,8 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun onActivitiesFilterChanged(checked: Boolean) {
-        isActivitiesEnabled = checked
+    private fun onActivitiesFilterChanged(activitiesFilterChanged: MainIntent.ActivitiesFilterChanged) {
+        isActivitiesEnabled = activitiesFilterChanged.isChecked
     }
 
     private fun obtainPlaces(visibleTiles: List<MapTileRegionModel>) {
@@ -280,9 +287,7 @@ class MainViewModel @Inject constructor(
 
     private fun updatePointsOnMap(pointsList: List<PointModel>) {
         if (clusters.isNotEmpty()) {
-            baseCoroutineScope.launch {
-                eventChannel.emit(ChannelEvent.RemovePoint(clusters.map { it.first }))
-            }
+            sendEvent(MainEvent.RemovePoint(clusters.map { it.first }))
 
             clusters.clear()
         }
@@ -304,19 +309,17 @@ class MainViewModel @Inject constructor(
                     val point = points.find { it.id == nodePoints.first().second }
 
                     point?.let {
-                        baseCoroutineScope.launch {
-                            eventChannel.emit(
-                                ChannelEvent.AddPoint(
-                                    id = point.id,
-                                    type = point.pointType,
-                                    name = point.name,
-                                    description = point.description,
-                                    showInfoWindow = point.id == lastSelectedPoint,
-                                    lat = point.location.latitude,
-                                    lon = point.location.longitude
-                                )
+                        sendEvent(
+                            MainEvent.AddPoint(
+                                id = point.id,
+                                type = point.pointType,
+                                name = point.name,
+                                description = point.description,
+                                showInfoWindow = point.id == lastSelectedPoint,
+                                lat = point.location.latitude,
+                                lon = point.location.longitude
                             )
-                        }
+                        )
                     }
                 } else {
                     var resultX = 0f
@@ -328,36 +331,32 @@ class MainViewModel @Inject constructor(
 
                     clusters.add(node.id to node.boundingBox)
 
-                    baseCoroutineScope.launch {
-                        eventChannel.emit(
-                            ChannelEvent.AddPoint(
-                                id = node.id,
-                                type = PointType.CLUSTER,
-                                name = points.size.toString(),
-                                description = null,
-                                showInfoWindow = false,
-                                lat = resultY.toDouble(),
-                                lon = resultX.toDouble()
-                            )
+                    sendEvent(
+                        MainEvent.AddPoint(
+                            id = node.id,
+                            type = PointType.CLUSTER,
+                            name = points.size.toString(),
+                            description = null,
+                            showInfoWindow = false,
+                            lat = resultY.toDouble(),
+                            lon = resultX.toDouble()
                         )
-                    }
+                    )
                 }
             }
         } else {
             pointsList.forEach { pointModel ->
-                baseCoroutineScope.launch {
-                    eventChannel.emit(
-                        ChannelEvent.AddPoint(
-                            id = pointModel.id,
-                            type = pointModel.pointType,
-                            name = pointModel.name,
-                            description = pointModel.description,
-                            showInfoWindow = pointModel.id == lastSelectedPoint,
-                            lat = pointModel.location.latitude,
-                            lon = pointModel.location.longitude
-                        )
+                sendEvent(
+                    MainEvent.AddPoint(
+                        id = pointModel.id,
+                        type = pointModel.pointType,
+                        name = pointModel.name,
+                        description = pointModel.description,
+                        showInfoWindow = pointModel.id == lastSelectedPoint,
+                        lat = pointModel.location.latitude,
+                        lon = pointModel.location.longitude
                     )
-                }
+                )
             }
         }
     }

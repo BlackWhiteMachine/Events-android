@@ -13,15 +13,19 @@ abstract class BaseActivity<VM : ViewModel> : AppCompatActivity() {
     @Inject
     lateinit var viewModelFactory: ViewModelProvider.Factory
 
-    protected val viewModel by lazy {
+    private val _viewModel by lazy {
         ViewModelProvider(
             this,
             viewModelFactory
         )[getViewModelClass()]
     }
 
+    open val viewModel: VM
+        get() = _viewModel
+
+    @Suppress("UNCHECKED_CAST")
     private fun getViewModelClass(): Class<VM> {
-        val type = (javaClass.genericSuperclass as ParameterizedType).actualTypeArguments[0]
+        val type = (javaClass.genericSuperclass as ParameterizedType).actualTypeArguments.toList().last()
         return type as Class<VM>
     }
 

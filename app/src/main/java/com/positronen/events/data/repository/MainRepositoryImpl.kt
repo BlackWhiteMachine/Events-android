@@ -60,7 +60,7 @@ class MainRepositoryImpl @Inject constructor(
     override suspend fun events(tileRegion: MapTileRegionModel): List<PointModel>{
         val mapRegionModel = tileRegion.mapRegionModel
         val centerLatitude = (mapRegionModel.topLeftLatitude + mapRegionModel.bottomRightLatitude) / 2
-        val centerLongitude = (mapRegionModel.topLeftLongitude + mapRegionModel.bottomRightLatitude) / 2
+        val centerLongitude = (mapRegionModel.topLeftLongitude + mapRegionModel.bottomRightLongitude) / 2
         val distance = radius(
             firstLatitude = mapRegionModel.topLeftLatitude,
             firstLongitude = mapRegionModel.topLeftLongitude,
@@ -119,6 +119,6 @@ class MainRepositoryImpl @Inject constructor(
 
     private companion object {
         const val DISTANCE_FILTER: String = "%.7f,%.7f,%.4f"
-        const val PAGE_SIZE: Int = 50
+        const val PAGE_SIZE: Int = 10
     }
 }
