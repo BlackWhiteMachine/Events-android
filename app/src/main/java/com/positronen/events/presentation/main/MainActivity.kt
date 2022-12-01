@@ -3,7 +3,6 @@ package com.positronen.events.presentation.main
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,12 +11,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.lifecycleScope
 
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -28,7 +24,7 @@ import com.positronen.events.R
 import com.positronen.events.databinding.ActivityMapsBinding
 import com.positronen.events.domain.model.ChannelEvent
 import com.positronen.events.domain.model.MapRegionModel
-import com.positronen.events.presentation.base.ViewModelFactory
+import com.positronen.events.presentation.base.BaseActivity
 import com.positronen.events.presentation.detail.DetailInfoDialogFragment
 import com.positronen.events.utils.Logger
 import kotlinx.coroutines.channels.Channel
@@ -36,25 +32,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-class MainActivity : AppCompatActivity() {
+class MainActivity : BaseActivity<MainViewModel>() {
 
     private lateinit var map: GoogleMap
     private lateinit var binding: ActivityMapsBinding
-
-    @Inject
-    lateinit var viewModelFactory: ViewModelProvider.Factory
-
-    private val viewModel by lazy {
-        ViewModelProvider(
-            this,
-            viewModelFactory
-        )[MainViewModel::class.java]
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,10 +74,10 @@ class MainActivity : AppCompatActivity() {
                 get() = cameraMovedChannel.receiveAsFlow()
 
             init {
-                lifecycleScope.launchWhenStarted {
+                baseCoroutineScope.launchWhenStarted {
                     cameraMovedChannel.send(Unit)
                 }
-                lifecycleScope.launchWhenStarted {
+                baseCoroutineScope.launchWhenStarted {
                     cameraMovedFlow.debounce(Duration.Companion.milliseconds(DEBOUNCE_MILLIS))
                         .collect {
                             val visibleRegion = map.projection.visibleRegion
@@ -115,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onCameraMove() {
-                lifecycleScope.launch {
+                baseCoroutineScope.launch {
                     cameraMovedChannel.send(Unit)
                 }
             }
@@ -155,7 +140,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initObserver() {
-        lifecycleScope.launchWhenStarted {
+        baseCoroutineScope.launchWhenStarted {
             viewModel.eventFlow.collect { channelEvent ->
                 when (channelEvent) {
                     is ChannelEvent.SetMyLocation -> setMyLocation(channelEvent)
@@ -168,7 +153,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        lifecycleScope.launchWhenStarted {
+        baseCoroutineScope.launchWhenStarted {
             viewModel.showLoading.collect { isShowing ->
                 binding.loaderProgressBar.isVisible = isShowing
             }

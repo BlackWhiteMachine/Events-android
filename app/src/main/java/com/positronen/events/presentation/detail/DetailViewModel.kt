@@ -1,11 +1,10 @@
 package com.positronen.events.presentation.detail
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointType
 import com.positronen.events.domain.model.detail.ChannelEventDetail
 import com.positronen.events.domain.interactor.MainInteractor
+import com.positronen.events.presentation.base.BaseViewModel
 import com.positronen.events.utils.Logger
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -15,7 +14,7 @@ import javax.inject.Inject
 
 class DetailViewModel @Inject constructor(
     private val interactor: MainInteractor
-) : ViewModel() {
+) : BaseViewModel() {
 
     private val dataMutableStateFlow = MutableStateFlow<PointDetailModel?>(null)
     val dataFlow: Flow<PointDetailModel>
@@ -29,7 +28,7 @@ class DetailViewModel @Inject constructor(
         get() = eventChannel.receiveAsFlow()
 
     fun onViewInit(id: String, pointType: PointType) {
-        viewModelScope.launch {
+        baseCoroutineScope.launch {
             interactor.point(id, pointType)
                 .catch { error ->
                     Logger.exception(Exception(error.message))
@@ -43,7 +42,7 @@ class DetailViewModel @Inject constructor(
     fun onShareAddressClicked() {
         val address: String = dataMutableStateFlow.value?.location?.address ?: return
 
-        viewModelScope.launch {
+        baseCoroutineScope.launch {
             eventChannel.send(ChannelEventDetail.ShareText(address))
         }
     }

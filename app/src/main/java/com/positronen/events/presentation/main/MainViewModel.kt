@@ -1,7 +1,5 @@
 package com.positronen.events.presentation.main
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.positronen.events.data.location.LocationDataSource
 import com.positronen.events.domain.model.ChannelEvent
 import com.positronen.events.domain.model.MapRegionModel
@@ -13,6 +11,7 @@ import com.positronen.events.domain.model.quad_tree.BoundingBox
 import com.positronen.events.domain.model.quad_tree.QuadTree
 import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.presentation.MapModel
+import com.positronen.events.presentation.base.BaseViewModel
 import com.positronen.events.utils.Logger
 import com.positronen.events.utils.getTileRegion
 import com.positronen.events.utils.getTilesList
@@ -34,7 +33,7 @@ import kotlin.math.pow
 class MainViewModel @Inject constructor(
     private val locationDataSource: LocationDataSource,
     private val mainInteractor: MainInteractor
-) : ViewModel() {
+) : BaseViewModel() {
 
     private val platesStateFlow = MutableStateFlow(Source.INIT)
     private val eventsStateFlow = MutableStateFlow(Source.INIT)
@@ -73,7 +72,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun onLocationPermissionGranted() {
-        viewModelScope.launch {
+        baseCoroutineScope.launch {
             locationDataSource.location().collect { (latitude, longitude) ->
                 eventChannel.emit(ChannelEvent.SetMyLocation(latitude, longitude))
             }
@@ -84,12 +83,12 @@ class MainViewModel @Inject constructor(
         if (type == PointType.CLUSTER) {
             val box = clusters.find { it.first == id } ?: return
 
-            viewModelScope.launch {
+            baseCoroutineScope.launch {
                 eventChannel.emit(ChannelEvent.MoveCamera(box.second))
             }
         } else {
             lastSelectedPoint = id
-            viewModelScope.launch {
+            baseCoroutineScope.launch {
                 eventChannel.emit(
                     ChannelEvent.ShowBottomSheet(id, type)
                 )
@@ -151,7 +150,7 @@ class MainViewModel @Inject constructor(
 
         clusters.clear()
 
-        viewModelScope.launch {
+        baseCoroutineScope.launch {
             eventChannel.emit(ChannelEvent.ClearMap)
         }
     }
@@ -223,7 +222,7 @@ class MainViewModel @Inject constructor(
         stateFlow: MutableStateFlow<Source>,
         onResult: (List<PointModel>) -> Unit
     ): Job {
-        return viewModelScope.launch(Dispatchers.IO) {
+        return baseCoroutineScope.launch(Dispatchers.IO) {
             stateFlow.value = Source.LOADING
 
             val result = mutableListOf<PointModel>()
@@ -254,7 +253,7 @@ class MainViewModel @Inject constructor(
     }
 
     private fun handleResult(pointsList: List<PointModel>) {
-        viewModelScope.launch {
+        baseCoroutineScope.launch {
             addPointsToMap(pointsList)
         }
     }
@@ -281,7 +280,7 @@ class MainViewModel @Inject constructor(
 
     private fun updatePointsOnMap(pointsList: List<PointModel>) {
         if (clusters.isNotEmpty()) {
-            viewModelScope.launch {
+            baseCoroutineScope.launch {
                 eventChannel.emit(ChannelEvent.RemovePoint(clusters.map { it.first }))
             }
 
@@ -305,7 +304,7 @@ class MainViewModel @Inject constructor(
                     val point = points.find { it.id == nodePoints.first().second }
 
                     point?.let {
-                        viewModelScope.launch {
+                        baseCoroutineScope.launch {
                             eventChannel.emit(
                                 ChannelEvent.AddPoint(
                                     id = point.id,
@@ -329,7 +328,7 @@ class MainViewModel @Inject constructor(
 
                     clusters.add(node.id to node.boundingBox)
 
-                    viewModelScope.launch {
+                    baseCoroutineScope.launch {
                         eventChannel.emit(
                             ChannelEvent.AddPoint(
                                 id = node.id,
@@ -346,7 +345,7 @@ class MainViewModel @Inject constructor(
             }
         } else {
             pointsList.forEach { pointModel ->
-                viewModelScope.launch {
+                baseCoroutineScope.launch {
                     eventChannel.emit(
                         ChannelEvent.AddPoint(
                             id = pointModel.id,
