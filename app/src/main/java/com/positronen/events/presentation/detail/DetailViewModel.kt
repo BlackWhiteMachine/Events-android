@@ -6,7 +6,6 @@ import com.positronen.events.domain.model.detail.ChannelEventDetail
 import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.presentation.base.BaseViewModel
 import com.positronen.events.utils.Logger
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.lang.Exception
@@ -23,9 +22,9 @@ class DetailViewModel @Inject constructor(
     val showProgressBarFlow: Flow<Boolean>
         get() = dataMutableStateFlow.map { it == null }
 
-    private val eventChannel = Channel<ChannelEventDetail>()
+    private val eventSharedFlow = MutableSharedFlow<ChannelEventDetail>()
     val eventFlow: Flow<ChannelEventDetail>
-        get() = eventChannel.receiveAsFlow()
+        get() = eventSharedFlow
 
     fun onViewInit(id: String, pointType: PointType) {
         baseCoroutineScope.launch {
@@ -43,7 +42,7 @@ class DetailViewModel @Inject constructor(
         val address: String = dataMutableStateFlow.value?.location?.address ?: return
 
         baseCoroutineScope.launch {
-            eventChannel.send(ChannelEventDetail.ShareText(address))
+            eventSharedFlow.emit(ChannelEventDetail.ShareText(address))
         }
     }
 }

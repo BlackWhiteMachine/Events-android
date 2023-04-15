@@ -1,71 +1,87 @@
 package com.positronen.events.domain.interactor
 
-import com.positronen.events.domain.MainRepository
+import com.positronen.events.domain.EventsRepository
+import com.positronen.events.domain.ActivitiesRepository
+import com.positronen.events.domain.PlacesRepository
 import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointDetailModel
 import com.positronen.events.domain.model.PointModel
 import com.positronen.events.domain.model.PointType
 import com.positronen.events.utils.getTopLeft
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
 import java.lang.RuntimeException
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 class MainInteractorImpl @Inject constructor(
-    private val mainRepository: MainRepository
+    private val placesRepository: PlacesRepository,
+    private val eventsRepository: EventsRepository,
+    private val activitiesRepository: ActivitiesRepository
 ) : MainInteractor {
 
     // TODO make DB cache
-    private val placesCache: MutableMap<String, List<PointModel>> = mutableMapOf()
-    private val eventsCache: MutableMap<String, List<PointModel>> = mutableMapOf()
+    private val placesCache: ConcurrentHashMap<String, List<PointModel>> = ConcurrentHashMap()
+    private val eventsCache: MutableMap<String, List<PointModel>> = ConcurrentHashMap()
 
     override val defaultDataZoomLevel: Int
         get() = DEFAULT_ZOOM_LEVEL
 
-    override fun places(visibleTilesList: List<MapTileRegionModel>): Flow<List<PointModel>> = flow {
-        visibleTilesList.forEach { mapRegionModel ->
-            val places = placesCache[mapRegionModel.getName()]
-                ?: getPlacesForTileRegionFromNetwork(mapRegionModel)
+    override fun places(visibleTilesList: List<MapTileRegionModel>): Flow<List<PointModel>> =
+        visibleTilesList.asFlow()
+            .flatMapMerge { mapRegionModel ->
+                val places = placesCache[mapRegionModel.getName()]
 
-            emit(places)
-        }
-    }
+                if (places != null) {
+                    flowOf(places)
+                } else {
+                    getPlacesForTileRegionFromNetwork(mapRegionModel)
+                }
+            }.flowOn(Dispatchers.IO)
 
-    override fun events(visibleTilesList: List<MapTileRegionModel>): Flow<List<PointModel>> = flow {
-        visibleTilesList.forEach { mapRegionModel ->
-            val events = eventsCache[mapRegionModel.getName()]
-                ?: getEventsForTileRegionFromNetwork(mapRegionModel)
+    override fun events(visibleTilesList: List<MapTileRegionModel>): Flow<List<PointModel>> =
+        visibleTilesList.asFlow()
+            .flatMapMerge { mapRegionModel ->
+                val events = eventsCache[mapRegionModel.getName()]
 
-
-            emit(events)
-        }
-    }
+                if (events != null) {
+                    flowOf(events)
+                } else {
+                    getEventsForTileRegionFromNetwork(mapRegionModel)
+                }
+            }.flowOn(Dispatchers.IO)
 
     override fun point(id: String, pointType: PointType): Flow<PointDetailModel> =
         when (pointType) {
-            PointType.PLACE -> mainRepository.place(id)
-            PointType.EVENT -> mainRepository.event(id)
+            PointType.PLACE -> placesRepository.place(id)
+            PointType.EVENT -> eventsRepository.event(id)
             PointType.ACTIVITY -> TODO()
             else -> throw RuntimeException("No detail information about cluster")
-        }
+        }.flowOn(Dispatchers.IO)
 
 
-    private suspend fun getPlacesForTileRegionFromNetwork(mapTileRegionModel: MapTileRegionModel): List<PointModel> {
-        return mainRepository.places(getTileRegion(mapTileRegionModel.xTile, mapTileRegionModel.yTile)).apply {
-            placesCache[mapTileRegionModel.getName()] = this
+    private fun getPlacesForTileRegionFromNetwork(
+        mapTile: MapTileRegionModel
+    ): Flow<List<PointModel>> =
+        placesRepository.places(getTileRegion(mapTile.xTile, mapTile.yTile)).onEach { pointModel ->
+            placesCache[mapTile.getName()] = pointModel
         }
-    }
 
-    private suspend fun getEventsForTileRegionFromNetwork(mapTileRegionModel: MapTileRegionModel): List<PointModel> {
-        return mainRepository.events(getTileRegion(mapTileRegionModel.xTile, mapTileRegionModel.yTile)).apply {
-            eventsCache[mapTileRegionModel.getName()] = this
+    private fun getEventsForTileRegionFromNetwork(
+        mapTile: MapTileRegionModel
+    ): Flow<List<PointModel>> =
+        eventsRepository.events(getTileRegion(mapTile.xTile, mapTile.yTile)).onEach { pointModel ->
+            eventsCache[mapTile.getName()] = pointModel
         }
-    }
 
     private fun getTileRegion(xTile: Int, yTile: Int): MapTileRegionModel {
         val (topLeftTileLat, topLeftTileLon) = getTopLeft(xTile, yTile, DEFAULT_ZOOM_LEVEL)
-        val (bottomRightTileLat, bottomRightTileLon) = getTopLeft(xTile + 1, yTile + 1, DEFAULT_ZOOM_LEVEL)
+        val (bottomRightTileLat, bottomRightTileLon) = getTopLeft(
+            xTile = xTile + 1,
+            yTile = yTile + 1,
+            zoom = DEFAULT_ZOOM_LEVEL
+        )
 
         return MapTileRegionModel(
             xTile = xTile,

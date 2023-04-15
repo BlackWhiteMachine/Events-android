@@ -15,7 +15,7 @@ sealed class MainIntent: BaseIntent() {
     data class CameraMoved(
         val zoomLevel: Int,
         val visibleRegion: MapRegionModel,
-        val isMaxZoomLevel: Boolean
+        val isMaxZoomLevel: Boolean,
         ): MainIntent()
 
     data class PlaceFilterChanged(val isChecked: Boolean): MainIntent()

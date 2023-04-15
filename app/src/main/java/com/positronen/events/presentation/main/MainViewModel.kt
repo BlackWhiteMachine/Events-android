@@ -1,14 +1,14 @@
 package com.positronen.events.presentation.main
 
 import com.positronen.events.data.location.LocationDataSource
+import com.positronen.events.domain.model.quad_tree.BoundingBox
+import com.positronen.events.domain.model.quad_tree.QuadTree
+import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.domain.model.MapTileRegionModel
 import com.positronen.events.domain.model.PointModel
 import com.positronen.events.domain.model.PointType
 import com.positronen.events.domain.model.Source
-import com.positronen.events.domain.model.quad_tree.BoundingBox
-import com.positronen.events.domain.model.quad_tree.QuadTree
-import com.positronen.events.domain.interactor.MainInteractor
 import com.positronen.events.presentation.MapModel
 import com.positronen.events.presentation.mvi.BaseMVIViewModel
 import com.positronen.events.utils.Logger
@@ -16,10 +16,12 @@ import com.positronen.events.utils.getTileRegion
 import com.positronen.events.utils.getTilesList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
@@ -38,7 +40,7 @@ class MainViewModel @Inject constructor(
     private val eventsStateFlow = MutableStateFlow(Source.INIT)
     private val mapStateFlow = MutableStateFlow(MapModel())
 
-    private var visibleRegion: MapRegionModel ?= null
+    private var visibleRegion: MapRegionModel?= null
     private var isMaxZoomLevel: Boolean = false
     private var lastSelectedPoint: String? = null
     private var visibleTiles: List<MapTileRegionModel>? = null
@@ -362,7 +364,7 @@ class MainViewModel @Inject constructor(
     }
 
     private companion object {
-        const val MIN_ZOOM_LEVEL: Int = 11
+        const val MIN_ZOOM_LEVEL: Int = 12
         const val QUAD_TREE_LEVELS_NUMBER: Int = 2
     }
 }

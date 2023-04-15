@@ -27,6 +27,7 @@ import com.positronen.events.presentation.detail.DetailInfoDialogFragment
 import com.positronen.events.presentation.mvi.BaseMVIActivity
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -108,7 +109,7 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
                                         bottomRightLatitude = visibleRegion.nearRight.latitude,
                                         bottomRightLongitude = visibleRegion.nearRight.longitude
                                     ),
-                                    isMaxZoomLevel = map.maxZoomLevel == map.cameraPosition.zoom
+                                    isMaxZoomLevel = map.maxZoomLevel == map.cameraPosition.zoom,
                                 )
                             )
                         }
