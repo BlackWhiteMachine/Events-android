@@ -25,11 +25,9 @@ import com.positronen.events.databinding.ActivityMapsBinding
 import com.positronen.events.domain.model.MapRegionModel
 import com.positronen.events.presentation.detail.DetailInfoDialogFragment
 import com.positronen.events.presentation.mvi.BaseMVIActivity
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
@@ -37,27 +35,37 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewModel>() {
 
-    private lateinit var map: GoogleMap
-    private lateinit var binding: ActivityMapsBinding
+    private var map: GoogleMap? = null
+    private var binding: ActivityMapsBinding? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMapsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+
+        val activityBinding = ActivityMapsBinding.inflate(layoutInflater)
+        binding = activityBinding
+        setContentView(activityBinding.root)
 
         (application as EventsApplication).component.inject(this)
 
         val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(::onMapReady)
 
-        binding.initListeners()
+        activityBinding.initListeners()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        map = null
+        binding = null
     }
 
     override fun handleState(state: MainState) {
         when (state) {
             is MainState.Loading -> {
-                binding.loaderProgressBar.isVisible = state.isShowing // true // isShowing
+                binding?.let { it.loaderProgressBar.isVisible = state.isShowing }
             }
+            MainState.Init -> { }
         }
     }
 
@@ -75,41 +83,45 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
     private fun onMapReady(googleMap: GoogleMap) {
         map = googleMap
 
-        map.setOnMarkerClickListener { marker ->
+        googleMap.initMap()
+    }
+
+    private fun GoogleMap.initMap() {
+        setOnMarkerClickListener { marker ->
             (marker.tag as? MainEvent.AddPoint)?.let { event ->
                 viewModel.sendIntent(MainIntent.MarkerClicked(event.id, event.type))
             }
             false
         }
-        map.setOnMapClickListener {
+        setOnMapClickListener {
             viewModel.sendIntent(MainIntent.MapClicked)
         }
 
-        map.setOnCameraMoveListener(object : GoogleMap.OnCameraMoveListener {
+        setOnCameraMoveListener(object : GoogleMap.OnCameraMoveListener {
 
-            private val cameraMovedChannel = Channel<Unit>()
+            private val cameraMovedChannel = MutableSharedFlow<Unit>()
             private val cameraMovedFlow: Flow<Unit>
-                get() = cameraMovedChannel.receiveAsFlow()
+                get() = cameraMovedChannel
 
             init {
                 baseCoroutineScope.launchWhenStarted {
-                    cameraMovedChannel.send(Unit)
+                    cameraMovedChannel.emit(Unit)
                 }
                 baseCoroutineScope.launchWhenStarted {
                     cameraMovedFlow.debounce(Duration.Companion.milliseconds(DEBOUNCE_MILLIS))
                         .collect {
-                            val visibleRegion = map.projection.visibleRegion
+                            val visibleRegion = projection.visibleRegion
 
                             viewModel.sendIntent(
                                 MainIntent.CameraMoved(
-                                    map.cameraPosition.zoom.toInt(),
+                                    cameraPosition.zoom.toInt(),
                                     MapRegionModel(
                                         topLeftLatitude = visibleRegion.farLeft.latitude,
                                         topLeftLongitude = visibleRegion.farLeft.longitude,
                                         bottomRightLatitude = visibleRegion.nearRight.latitude,
                                         bottomRightLongitude = visibleRegion.nearRight.longitude
                                     ),
-                                    isMaxZoomLevel = map.maxZoomLevel == map.cameraPosition.zoom,
+                                    isMaxZoomLevel = maxZoomLevel == cameraPosition.zoom,
                                 )
                             )
                         }
@@ -118,15 +130,15 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
 
             override fun onCameraMove() {
                 baseCoroutineScope.launch {
-                    cameraMovedChannel.send(Unit)
+                    cameraMovedChannel.emit(Unit)
                 }
             }
         })
 
-        map.uiSettings.isCompassEnabled = true
-        map.uiSettings.isMyLocationButtonEnabled = true
-        map.uiSettings.isZoomControlsEnabled = true
-        map.moveCamera(CameraUpdateFactory.zoomTo(18F))
+        uiSettings.isCompassEnabled = true
+        uiSettings.isMyLocationButtonEnabled = true
+        uiSettings.isZoomControlsEnabled = true
+        moveCamera(CameraUpdateFactory.zoomTo(18F))
 
         showRequestPermission(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -200,7 +212,7 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
 
     @SuppressLint("MissingPermission")
     private fun onLocationPermissionGranted() {
-        map.isMyLocationEnabled = true
+        map?.isMyLocationEnabled = true
 
         viewModel.sendIntent(MainIntent.LocationPermissionGranted)
     }
@@ -217,7 +229,7 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
     private fun setMyLocation(event: MainEvent.SetMyLocation) {
         val point = LatLng(event.lat, event.lon)
 
-        map.moveCamera(CameraUpdateFactory.newLatLng(point))
+        map?.moveCamera(CameraUpdateFactory.newLatLng(point))
     }
 
     private val markersMap: MutableMap<String, Marker> = mutableMapOf()
@@ -229,7 +241,7 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
         event.description?.let {
             markerOptions.snippet(it)
         }
-        val marker = map.addMarker(markerOptions)
+        val marker = map?.addMarker(markerOptions)
         marker?.let {
             it.tag = event
             if (event.showInfoWindow) {
@@ -254,7 +266,7 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
     }
 
     private fun moveCamera(channelEvent: MainEvent.MoveCamera) {
-        map.moveCamera(
+        map?.moveCamera(
             CameraUpdateFactory.newLatLngBounds(
                 LatLngBounds(
                     LatLng(channelEvent.box.bottomLeft.y.toDouble(), channelEvent.box.bottomLeft.x.toDouble()),
