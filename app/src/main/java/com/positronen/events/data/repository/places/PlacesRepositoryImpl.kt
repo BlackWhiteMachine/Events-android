@@ -1,7 +1,7 @@
 package com.positronen.events.data.repository.places
 
-import com.positronen.events.data.converter.MainConverter
-import com.positronen.events.data.converter.MainConverterImpl
+import com.positronen.events.data.converter.places.convertResponsePlaceDetail
+import com.positronen.events.data.converter.places.convertResponsePlaces
 import com.positronen.events.data.model.PlaceV2Response
 import com.positronen.events.data.service.MainService
 import com.positronen.events.domain.PlacesRepository
@@ -17,8 +17,6 @@ import javax.inject.Inject
 class PlacesRepositoryImpl @Inject constructor(
     private val service: MainService
 ) : PlacesRepository {
-
-    private val mainConverter: MainConverter = MainConverterImpl()
 
     override fun places(tileRegion: MapTileRegionModel): Flow<List<PointModel>> = flow {
         val mapTile = tileRegion.mapRegionModel
@@ -43,10 +41,10 @@ class PlacesRepositoryImpl @Inject constructor(
             hasNext = response.size == PAGE_SIZE
         }
 
-        val places = mainConverter.convertResponsePlaces(resultList).filter {
+        val places = convertResponsePlaces(resultList).filter { point ->
             tileRegion.mapRegionModel.isContains(
-                it.location.latitude,
-                it.location.longitude,
+                point.location.latitude,
+                point.location.longitude,
             )
         }
 
@@ -55,7 +53,7 @@ class PlacesRepositoryImpl @Inject constructor(
 
     override fun place(id: String): Flow<PointDetailModel> = flow {
         emit(service.place(id))
-    }.mapNotNull(mainConverter::convertResponsePlaceDetail)
+    }.mapNotNull(::convertResponsePlaceDetail)
 
     private companion object {
         const val DISTANCE_FILTER: String = "%.7f,%.7f,%.4f"

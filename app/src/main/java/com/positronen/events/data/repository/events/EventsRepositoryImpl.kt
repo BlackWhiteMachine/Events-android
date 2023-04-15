@@ -1,7 +1,7 @@
 package com.positronen.events.data.repository.events
 
-import com.positronen.events.data.converter.MainConverter
-import com.positronen.events.data.converter.MainConverterImpl
+import com.positronen.events.data.converter.events.convertResponseEventDetail
+import com.positronen.events.data.converter.events.convertResponseEvents
 import com.positronen.events.data.model.EventsV1Response
 import com.positronen.events.data.service.MainService
 import com.positronen.events.domain.EventsRepository
@@ -17,8 +17,6 @@ import javax.inject.Inject
 class EventsRepositoryImpl @Inject constructor(
     private val service: MainService
 ) : EventsRepository {
-
-    private val mainConverter: MainConverter = MainConverterImpl()
 
     override fun events(tileRegion: MapTileRegionModel): Flow<List<PointModel>> = flow {
         val mapTile = tileRegion.mapRegionModel
@@ -42,10 +40,10 @@ class EventsRepositoryImpl @Inject constructor(
             hasNext = response.size == PAGE_SIZE
         }
 
-        val events =  mainConverter.convertResponseEvents(resultList).filter {
+        val events =  convertResponseEvents(resultList).filter { point ->
             tileRegion.mapRegionModel.isContains(
-                it.location.latitude,
-                it.location.longitude,
+                point.location.latitude,
+                point.location.longitude,
             )
         }
 
@@ -54,7 +52,7 @@ class EventsRepositoryImpl @Inject constructor(
 
     override fun event(id: String): Flow<PointDetailModel> = flow {
         emit(service.event(id))
-    }.mapNotNull(mainConverter::convertResponseEventDetail)
+    }.mapNotNull(::convertResponseEventDetail)
 
     private companion object {
         const val DISTANCE_FILTER: String = "%.7f,%.7f,%.4f"

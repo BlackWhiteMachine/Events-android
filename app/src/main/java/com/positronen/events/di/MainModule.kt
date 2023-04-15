@@ -28,8 +28,10 @@ abstract class MainModule {
 
     @Binds
     abstract fun bindPlacesRepository(impl: PlacesRepositoryImpl): PlacesRepository
+
     @Binds
     abstract fun bindEventsRepository(impl: EventsRepositoryImpl): EventsRepository
+
     @Binds
     abstract fun bindActivitiesRepository(impl: ActivitiesRepositoryImpl): ActivitiesRepository
 
