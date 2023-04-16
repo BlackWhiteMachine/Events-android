@@ -269,8 +269,14 @@ class MainActivity : BaseMVIActivity<MainState, MainEvent, MainIntent, MainViewM
         map?.moveCamera(
             CameraUpdateFactory.newLatLngBounds(
                 LatLngBounds(
-                    LatLng(channelEvent.box.bottomLeft.y.toDouble(), channelEvent.box.bottomLeft.x.toDouble()),
-                    LatLng(channelEvent.box.topRight.y.toDouble(), channelEvent.box.topRight.x.toDouble())
+                    LatLng(
+                        channelEvent.box.bottomLeft.y.toDouble(),
+                        channelEvent.box.bottomLeft.x.toDouble()
+                    ),
+                    LatLng(
+                        channelEvent.box.topRight.y.toDouble(),
+                        channelEvent.box.topRight.x.toDouble()
+                    )
                 ),
                 10)
         )
